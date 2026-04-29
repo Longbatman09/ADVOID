@@ -44,6 +44,8 @@ class AdNotificationListenerService : NotificationListenerService() {
     private var currentFadeRunnable: Runnable? = null
     private var isMediaRefreshRunning = false
     private var lastPublishedMediaSignature: String? = null
+    private var lastAlbumArtFingerprint: String? = null
+    private var cachedAlbumArtPath: String? = null
 
     // Muting sequence state: 0=normal, 1=muted, 2=in sound, 3=out sound
     private var muteSequenceState = 0
@@ -261,6 +263,7 @@ class AdNotificationListenerService : NotificationListenerService() {
             if (AdMuteSettings.getNowPlayingInfo(this) != null) {
                 AdMuteSettings.clearNowPlayingInfo(this)
             }
+            clearCachedAlbumArt()
             lastPublishedMediaSignature = null
             return
         }
@@ -316,6 +319,8 @@ class AdNotificationListenerService : NotificationListenerService() {
             append(info.text)
             append('|')
             append(info.subText)
+            append('|')
+            append(info.albumArtPath.orEmpty())
         }
     }
 
@@ -532,19 +537,54 @@ class AdNotificationListenerService : NotificationListenerService() {
     }
 
     private fun extractAndCacheAlbumArt(notification: Notification, controller: MediaController?): String? {
-        val bitmap = extractAlbumArtBitmap(notification, controller) ?: return null
-        val previousPath = AdMuteSettings.getNowPlayingInfo(this)?.albumArtPath
-        val outputFile = File(cacheDir, "${NOW_PLAYING_ALBUM_ART_FILE_PREFIX}_${System.currentTimeMillis()}.jpg")
+        val bitmap = extractAlbumArtBitmap(notification, controller) ?: run {
+            clearCachedAlbumArt()
+            return null
+        }
+        val fingerprint = buildAlbumArtFingerprint(bitmap)
+        val existingPath = cachedAlbumArtPath
+        if (fingerprint == lastAlbumArtFingerprint && existingPath != null && File(existingPath).exists()) {
+            return existingPath
+        }
+        val outputFile = File(cacheDir, "${NOW_PLAYING_ALBUM_ART_FILE_PREFIX}.jpg")
 
         return runCatching {
             FileOutputStream(outputFile).use { stream ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 88, stream)
             }
-            previousPath
-                ?.takeIf { it != outputFile.absolutePath }
-                ?.let { File(it).takeIf(File::exists)?.delete() }
+            lastAlbumArtFingerprint = fingerprint
+            cachedAlbumArtPath = outputFile.absolutePath
             outputFile.absolutePath
         }.getOrNull()
+    }
+
+    private fun buildAlbumArtFingerprint(bitmap: Bitmap): String {
+        return runCatching {
+            val width = bitmap.width.coerceAtLeast(1)
+            val height = bitmap.height.coerceAtLeast(1)
+            val points = listOf(
+                0f to 0f,
+                0.5f to 0.5f,
+                1f to 1f,
+                0.25f to 0.75f,
+                0.75f to 0.25f
+            )
+            val samples = points.joinToString(separator = ",") { (xFactor, yFactor) ->
+                val x = ((width - 1) * xFactor).toInt().coerceIn(0, width - 1)
+                val y = ((height - 1) * yFactor).toInt().coerceIn(0, height - 1)
+                bitmap.getPixel(x, y).toString()
+            }
+            "$width:$height:$samples"
+        }.getOrElse { "${bitmap.width}:${bitmap.height}:${bitmap.byteCount}" }
+    }
+
+    private fun clearCachedAlbumArt() {
+        cachedAlbumArtPath
+            ?.let(::File)
+            ?.takeIf(File::exists)
+            ?.delete()
+        cachedAlbumArtPath = null
+        lastAlbumArtFingerprint = null
     }
 
     private fun extractAlbumArtBitmap(notification: Notification, controller: MediaController?): Bitmap? {

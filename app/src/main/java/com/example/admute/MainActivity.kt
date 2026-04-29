@@ -1,6 +1,7 @@
 package com.example.admute
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.NameNotFoundException
@@ -37,7 +38,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.MarqueeAnimationMode
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -50,6 +54,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
@@ -71,7 +76,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -108,6 +112,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
@@ -185,6 +190,7 @@ class MainActivity : ComponentActivity() {
                         if (AdMuteSettings.isSetupCompleted(this@MainActivity)) SetupStep.RUNNING else SetupStep.INTRO
                     )
                 }
+                var isPaused by remember { mutableStateOf(false) }
                 var selectedWhitelist by remember {
                     mutableStateOf(WhitelistedApps.getSelected(this@MainActivity))
                 }
@@ -286,6 +292,8 @@ class MainActivity : ComponentActivity() {
                                     onViewLogs = { setupStep = SetupStep.LOGS },
                                     onViewAbout = { setupStep = SetupStep.ABOUT },
                                     onChangeTheme = { setupStep = SetupStep.THEME },
+                                    isPaused = isPaused,
+                                    onPauseToggle = { isPaused = !isPaused },
                                     modifier = Modifier.padding(innerPadding)
                                 )
                                 AnimatedVisibility(
@@ -330,7 +338,6 @@ class MainActivity : ComponentActivity() {
                                         onThemeSelected = { newThemeMode ->
                                             themeMode = newThemeMode
                                             AdMuteSettings.saveThemeMode(this@MainActivity, newThemeMode)
-                                            setupStep = SetupStep.RUNNING
                                         },
                                         onDismiss = { setupStep = SetupStep.RUNNING }
                                     )
@@ -350,7 +357,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 
-                if (setupStep == SetupStep.LOGS || setupStep == SetupStep.ABOUT || setupStep == SetupStep.NOTIFICATION_SOUND) {
+                if (
+                    setupStep == SetupStep.LOGS ||
+                    setupStep == SetupStep.ABOUT ||
+                    setupStep == SetupStep.NOTIFICATION_SOUND ||
+                    setupStep == SetupStep.THEME
+                ) {
                     BackHandler {
                         setupStep = SetupStep.RUNNING
                     }
@@ -883,32 +895,117 @@ fun RunningScreen(
     onModifyNotificationSounds: () -> Unit,
     onViewLogs: () -> Unit,
     onViewAbout: () -> Unit,
+    isPaused: Boolean,
+    onPauseToggle: () -> Unit,
     modifier: Modifier = Modifier,
     onChangeTheme: () -> Unit = {}
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        ActionButtonLeftAligned("Manage whitelist apps", onChangeWhitelist)
-        ActionButtonLeftAligned("Change cooldown", onChangeCooldown)
-        ActionButtonLeftAligned("Modify notification sounds", onModifyNotificationSounds)
-        ActionButtonLeftAligned("Change theme", onChangeTheme)
-        ActionButtonLeftAligned("View ad detection logs", onViewLogs)
-        ActionButtonLeftAligned("About", onViewAbout)
-        NowPlayingInfoBox(nowPlayingInfo = nowPlayingInfo)
-        Spacer(modifier = Modifier.weight(1f))
-        // Bottom-centered running status
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text(
-                text = "ADMUTE IS CURRENTLY RUNNING",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
-                textAlign = TextAlign.Center
-            )
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    Box(modifier = modifier.fillMaxSize()) {
+        if (isLandscape) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ActionButtonLeftAligned("Manage whitelist apps", onChangeWhitelist, enableMarquee = true)
+                    ActionButtonLeftAligned("Change cooldown", onChangeCooldown, enableMarquee = true)
+                    ActionButtonLeftAligned("Modify notification sounds", onModifyNotificationSounds, enableMarquee = true)
+                    ActionButtonLeftAligned("Change theme", onChangeTheme, enableMarquee = true)
+                    ActionButtonLeftAligned("View ad detection logs", onViewLogs, enableMarquee = true)
+                    ActionButtonLeftAligned("About", onViewAbout, enableMarquee = true)
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    NowPlayingInfoBox(nowPlayingInfo = nowPlayingInfo)
+                    Spacer(modifier = Modifier.weight(1f))
+                    ActionButtonLeftAligned(
+                        if (isPaused) "Resume ADMUTE" else "Pause ADMUTE",
+                        onPauseToggle,
+                        enableMarquee = true
+                    )
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "ADBLOCK IS CURRENTLY RUNNING",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ActionButtonLeftAligned("Manage whitelist apps", onChangeWhitelist)
+                ActionButtonLeftAligned("Change cooldown", onChangeCooldown)
+                ActionButtonLeftAligned("Modify notification sounds", onModifyNotificationSounds)
+                ActionButtonLeftAligned("Change theme", onChangeTheme)
+                ActionButtonLeftAligned("View ad detection logs", onViewLogs)
+                ActionButtonLeftAligned("About", onViewAbout)
+                NowPlayingInfoBox(nowPlayingInfo = nowPlayingInfo)
+                Spacer(modifier = Modifier.weight(1f))
+                ActionButtonLeftAligned(
+                    if (isPaused) "Resume ADMUTE" else "Pause ADMUTE",
+                    onPauseToggle
+                )
+                // Bottom-centered running status
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "ADMUTE IS CURRENTLY RUNNING",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+
+        // Pause Overlay
+        if (isPaused) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.85f))
+                    .clickable { onPauseToggle() },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "ADMUTE IS PAUSED",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Ad block is temporarily paused\nclick to resume",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         }
     }
 }
@@ -922,11 +1019,66 @@ fun AdLogsScreen(
     var logs by remember { mutableStateOf(AdMuteSettings.getAdLogs(context)) }
     val dateFormatter = remember { SimpleDateFormat("HH:mm:ss, dd MMM", Locale.getDefault()) }
 
+    // Calculate total duration
+    val totalDurationSeconds = remember(logs) {
+        logs.sumOf { entry ->
+            if (entry.endTime > entry.timestamp) {
+                (entry.endTime - entry.timestamp) / 1000
+            } else {
+                0L
+            }
+        }
+    }
+
+    val totalDurationFormatted = remember(totalDurationSeconds) {
+        when {
+            totalDurationSeconds < 60 -> "${totalDurationSeconds}s"
+            totalDurationSeconds < 3600 -> {
+                val minutes = totalDurationSeconds / 60
+                val seconds = totalDurationSeconds % 60
+                "${minutes}m ${seconds}s"
+            }
+            else -> {
+                val hours = totalDurationSeconds / 3600
+                val minutes = (totalDurationSeconds % 3600) / 60
+                val seconds = totalDurationSeconds % 60
+                "${hours}h ${minutes}m ${seconds}s"
+            }
+        }
+    }
+
     AppScreenContainer(
         title = "Ad Detection Logs",
         subtitle = "History of detected ads and muted apps.",
         modifier = modifier.background(MaterialTheme.colorScheme.background)
     ) {
+        // Total time saved box
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Total Time ADBlock Saved",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = totalDurationFormatted,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
         ElevatedCard(
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(16.dp)
@@ -1017,18 +1169,40 @@ fun AdLogsScreen(
 }
 
 @Composable
-private fun ActionButtonLeftAligned(title: String, onClick: () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun ActionButtonLeftAligned(
+    title: String,
+    onClick: () -> Unit,
+    enableMarquee: Boolean = false
+) {
     Button(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(text = title, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+        Text(
+            text = title,
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (enableMarquee) {
+                        Modifier.basicMarquee(
+                            iterations = Int.MAX_VALUE,
+                            animationMode = MarqueeAnimationMode.Immediately
+                        )
+                    } else {
+                        Modifier
+                    }
+                ),
+            textAlign = TextAlign.Start,
+            maxLines = 1
+        )
     }
 }
 
 @Composable
 private fun NowPlayingInfoBox(nowPlayingInfo: NowPlayingInfo?) {
+    val context = LocalContext.current
     val albumArtBitmap = remember(
         nowPlayingInfo?.albumArtPath,
         nowPlayingInfo?.updatedAtMs,
@@ -1042,6 +1216,13 @@ private fun NowPlayingInfoBox(nowPlayingInfo: NowPlayingInfo?) {
             } catch (t: Throwable) {
                 null
             }
+            }
+        }
+    val appIconBitmap = remember(nowPlayingInfo?.packageName) {
+        nowPlayingInfo?.packageName?.takeIf { it.isNotBlank() }?.let { packageName ->
+            runCatching {
+                context.packageManager.getApplicationIcon(packageName).toBitmapSafely()
+            }.getOrNull()
         }
     }
     val noMusicPlaying = nowPlayingInfo == null ||
@@ -1077,28 +1258,51 @@ private fun NowPlayingInfoBox(nowPlayingInfo: NowPlayingInfo?) {
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (albumArtBitmap != null) {
-                    Image(
-                        bitmap = albumArtBitmap.asImageBitmap(),
-                        contentDescription = "Album art",
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)),
-                        contentScale = ContentScale.Crop,
-                        filterQuality = FilterQuality.High
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "♪",
-                            style = MaterialTheme.typography.headlineLarge,
-                            color = MaterialTheme.colorScheme.primary
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+                ) {
+                    if (albumArtBitmap != null) {
+                        Image(
+                            bitmap = albumArtBitmap.asImageBitmap(),
+                            contentDescription = "Album art",
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Crop,
+                            filterQuality = FilterQuality.High
                         )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "♪",
+                                style = MaterialTheme.typography.headlineLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    appIconBitmap?.let { icon ->
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(4.dp)
+                                .size(24.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surface
+                        ) {
+                            Image(
+                                bitmap = icon.asImageBitmap(),
+                                contentDescription = "${info.appName} icon",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(2.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                     }
                 }
 
@@ -1108,14 +1312,6 @@ private fun NowPlayingInfoBox(nowPlayingInfo: NowPlayingInfo?) {
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = info.appName.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = info.title,
                         style = MaterialTheme.typography.titleMedium,
@@ -1648,161 +1844,130 @@ fun AboutScreen(
 }
 
 @Composable
-fun ThemeSettingsScreen(
-    themeMode: ThemeMode,
-    onThemeChange: (ThemeMode) -> Unit,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
+fun ThemeSelectionDialog(
+    currentThemeMode: ThemeMode,
+    onThemeSelected: (ThemeMode) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    AppScreenContainer(
-        title = "Theme Settings",
-        subtitle = "Choose your preferred color theme.",
-        modifier = modifier.background(MaterialTheme.colorScheme.background)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.2f))
+            .padding(horizontal = 20.dp),
+        contentAlignment = Alignment.Center
     ) {
         ElevatedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth(0.92f)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Spacer(modifier = Modifier.weight(1f))
                 Text(
-                    text = "Current Theme",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    text = "Theme settings",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
                 )
-
-                // Theme preview cards
-                Column(
+                Text(
+                    text = "Swipe up/down to select System, Light, or Dark.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                ThemeRoller(
+                    currentTheme = currentThemeMode,
+                    onThemeChange = onThemeSelected
+                )
+                OutlinedButton(
+                    onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    shape = RoundedCornerShape(14.dp)
                 ) {
-                    // Light theme preview
-                    ThemeOptionCard(
-                        title = "Light Mode",
-                        description = "White background with teal accents",
-                        containerColor = Color(0xFFFFFFFF),
-                        accentColor = Color(0xFF23847d),
-                        textColor = Color(0xFF23847d),
-                        isSelected = themeMode == ThemeMode.LIGHT,
-                        onSelect = { onThemeChange(ThemeMode.LIGHT) }
-                    )
-
-                    // Dark theme preview
-                    ThemeOptionCard(
-                        title = "Dark Mode",
-                        description = "Dark background with gold accents",
-                        containerColor = Color(0xFF0F2B26),
-                        accentColor = Color(0xFFC7BE3A),
-                        textColor = Color(0xFFC7BE3A),
-                        isSelected = themeMode == ThemeMode.DARK,
-                        onSelect = { onThemeChange(ThemeMode.DARK) }
-                    )
-
-                    // System theme preview
-                    ThemeOptionCard(
-                        title = "System Theme",
-                        description = "Follow device system theme settings",
-                        containerColor = Color(0xFFF5F5F5),
-                        accentColor = Color(0xFF666666),
-                        textColor = Color(0xFF666666),
-                        isSelected = themeMode == ThemeMode.SYSTEM,
-                        onSelect = { onThemeChange(ThemeMode.SYSTEM) }
-                    )
+                    Text("Back")
                 }
-                Spacer(modifier = Modifier.weight(1f))
             }
-        }
-        Button(
-            onClick = onBack,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Text("Back")
         }
     }
 }
 
 @Composable
-private fun ThemeOptionCard(
-    title: String,
-    description: String,
-    containerColor: Color,
-    accentColor: Color,
-    textColor: Color,
-    isSelected: Boolean,
-    onSelect: () -> Unit
+private fun ThemeRoller(
+    currentTheme: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onSelect() },
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = containerColor
-        ),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = textColor
-                    )
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = textColor
-                    )
-                }
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .background(accentColor, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("✓", color = Color.White, fontWeight = FontWeight.Bold)
+    val themes = listOf(ThemeMode.SYSTEM, ThemeMode.LIGHT, ThemeMode.DARK)
+    val themeIndex = themes.indexOf(currentTheme).takeIf { it >= 0 } ?: 0
+    val minThemeIndex = 0
+    val maxThemeIndex = themes.size - 1
+    var accumulatedDrag by remember { mutableStateOf(0f) }
+
+    val previousThemeIndex = (themeIndex - 1).takeIf { it >= minThemeIndex }
+    val nextThemeIndex = (themeIndex + 1).takeIf { it <= maxThemeIndex }
+    val previousTheme = previousThemeIndex?.let { themes.getOrNull(it) }
+    val nextTheme = nextThemeIndex?.let { themes.getOrNull(it) }
+    val previousAlpha by animateFloatAsState(targetValue = if (previousTheme == null) 0f else 0.5f, label = "prev-theme-alpha")
+    val nextAlpha by animateFloatAsState(targetValue = if (nextTheme == null) 0f else 0.5f, label = "next-theme-alpha")
+
+    Column(
+        modifier = modifier.pointerInput(themeIndex) {
+            detectVerticalDragGestures(
+                onVerticalDrag = { change, dragAmount ->
+                    accumulatedDrag += dragAmount
+                    val stepThresholdPx = 24f
+
+                    while (abs(accumulatedDrag) >= stepThresholdPx) {
+                        val steppingDown = accumulatedDrag > 0
+                        val candidate = if (steppingDown) themeIndex - 1 else themeIndex + 1
+                        val newIndex = candidate.coerceIn(minThemeIndex, maxThemeIndex)
+                        onThemeChange(themes[newIndex])
+                        accumulatedDrag += if (steppingDown) -stepThresholdPx else stepThresholdPx
                     }
+                    change.consume()
+                },
+                onDragEnd = { accumulatedDrag = 0f },
+                onDragCancel = { accumulatedDrag = 0f }
+            )
+        },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = previousTheme?.label ?: "",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.alpha(previousAlpha)
+        )
+        AnimatedContent(
+            targetState = currentTheme,
+            transitionSpec = {
+                if (themes.indexOf(targetState) > themes.indexOf(initialState)) {
+                    (slideInVertically { it / 2 } + fadeIn() + scaleIn(initialScale = 0.82f))
+                        .togetherWith(slideOutVertically { -it / 2 } + fadeOut() + scaleOut(targetScale = 1.18f))
+                } else {
+                    (slideInVertically { -it / 2 } + fadeIn() + scaleIn(initialScale = 0.82f))
+                        .togetherWith(slideOutVertically { it / 2 } + fadeOut() + scaleOut(targetScale = 1.18f))
                 }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .background(containerColor, RoundedCornerShape(4.dp))
-                        .border(1.dp, accentColor, RoundedCornerShape(4.dp))
-                )
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .background(accentColor, RoundedCornerShape(4.dp))
-                )
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .background(accentColor.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                )
-            }
+            },
+            label = "theme-roller"
+        ) { theme ->
+            Text(
+                text = theme.label,
+                style = MaterialTheme.typography.displayMedium,
+                fontWeight = FontWeight.Bold
+            )
         }
+        Text(
+            text = nextTheme?.label ?: "",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.alpha(nextAlpha)
+        )
     }
 }
 

@@ -2,6 +2,8 @@ package com.example.admute.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -42,7 +44,7 @@ fun ADMUTETheme(
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
+    val targetColorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
@@ -51,6 +53,37 @@ fun ADMUTETheme(
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
+
+    val animationSpec = tween<Color>(durationMillis = 420)
+    val primary = animateColorAsState(targetColorScheme.primary, animationSpec = animationSpec, label = "theme-primary")
+    val onPrimary = animateColorAsState(targetColorScheme.onPrimary, animationSpec = animationSpec, label = "theme-on-primary")
+    val secondary = animateColorAsState(targetColorScheme.secondary, animationSpec = animationSpec, label = "theme-secondary")
+    val onSecondary = animateColorAsState(targetColorScheme.onSecondary, animationSpec = animationSpec, label = "theme-on-secondary")
+    val tertiary = animateColorAsState(targetColorScheme.tertiary, animationSpec = animationSpec, label = "theme-tertiary")
+    val background = animateColorAsState(targetColorScheme.background, animationSpec = animationSpec, label = "theme-background")
+    val onBackground = animateColorAsState(targetColorScheme.onBackground, animationSpec = animationSpec, label = "theme-on-background")
+    val surface = animateColorAsState(targetColorScheme.surface, animationSpec = animationSpec, label = "theme-surface")
+    val onSurface = animateColorAsState(targetColorScheme.onSurface, animationSpec = animationSpec, label = "theme-on-surface")
+    val surfaceVariant = animateColorAsState(targetColorScheme.surfaceVariant, animationSpec = animationSpec, label = "theme-surface-variant")
+    val onSurfaceVariant = animateColorAsState(targetColorScheme.onSurfaceVariant, animationSpec = animationSpec, label = "theme-on-surface-variant")
+    val outline = animateColorAsState(targetColorScheme.outline, animationSpec = animationSpec, label = "theme-outline")
+    val outlineVariant = animateColorAsState(targetColorScheme.outlineVariant, animationSpec = animationSpec, label = "theme-outline-variant")
+
+    val colorScheme = targetColorScheme.copy(
+        primary = primary.value,
+        onPrimary = onPrimary.value,
+        secondary = secondary.value,
+        onSecondary = onSecondary.value,
+        tertiary = tertiary.value,
+        background = background.value,
+        onBackground = onBackground.value,
+        surface = surface.value,
+        onSurface = onSurface.value,
+        surfaceVariant = surfaceVariant.value,
+        onSurfaceVariant = onSurfaceVariant.value,
+        outline = outline.value,
+        outlineVariant = outlineVariant.value
+    )
 
     MaterialTheme(
         colorScheme = colorScheme,
