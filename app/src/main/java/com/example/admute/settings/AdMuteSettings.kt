@@ -28,6 +28,18 @@ enum class StockNotificationSound(val storageValue: String, val label: String, v
     }
 }
 
+enum class ThemeMode(val storageValue: String, val label: String) {
+    LIGHT("light", "Light Mode"),
+    DARK("dark", "Dark Mode"),
+    SYSTEM("system", "System Theme");
+
+    companion object {
+        fun fromStorage(value: String?): ThemeMode {
+            return entries.firstOrNull { it.storageValue == value } ?: SYSTEM
+        }
+    }
+}
+
 data class NotificationSoundConfig(
     val source: NotificationSoundSource,
     val stockSound: StockNotificationSound,
@@ -48,6 +60,14 @@ data class NowPlayingInfo(
     val subText: String,
     val albumArtPath: String?,
     val updatedAtMs: Long
+)
+
+data class AdLogEntry(
+    val appName: String,
+    val packageName: String,
+    val timestamp: Long,
+    val endTime: Long = 0L,
+    val content: String
 )
 
 object AdMuteSettings {
@@ -72,6 +92,10 @@ object AdMuteSettings {
     private const val KEY_NOW_PLAYING_SUBTEXT = "now_playing_subtext"
     private const val KEY_NOW_PLAYING_ALBUM_ART_PATH = "now_playing_album_art_path"
     private const val KEY_NOW_PLAYING_UPDATED_AT = "now_playing_updated_at"
+    private const val KEY_AD_LOGS = "ad_logs"
+    private const val KEY_THEME_MODE = "theme_mode"
+
+    private const val MAX_LOG_ENTRIES = 50
 
     private const val DEFAULT_COOLDOWN_MINUTES = 3
     private const val MIN_COOLDOWN_MINUTES = 1
@@ -203,6 +227,101 @@ object AdMuteSettings {
             albumArtPath = albumArtPath,
             updatedAtMs = updatedAtMs
         )
+    }
+
+    fun clearNowPlayingInfo(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .remove(KEY_NOW_PLAYING_APP_NAME)
+            .remove(KEY_NOW_PLAYING_PACKAGE)
+            .remove(KEY_NOW_PLAYING_TITLE)
+            .remove(KEY_NOW_PLAYING_TEXT)
+            .remove(KEY_NOW_PLAYING_SUBTEXT)
+            .remove(KEY_NOW_PLAYING_ALBUM_ART_PATH)
+            .remove(KEY_NOW_PLAYING_UPDATED_AT)
+            .apply()
+    }
+
+    fun addAdLog(context: Context, entry: AdLogEntry) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val currentLogs = getAdLogs(context).toMutableList()
+        currentLogs.add(0, entry)
+        val limitedLogs = currentLogs.take(MAX_LOG_ENTRIES)
+        
+        val logStrings = limitedLogs.map { 
+            val app = it.appName.replace("|", " ").replace(";", " ")
+            val pkg = it.packageName.replace("|", " ").replace(";", " ")
+            val content = it.content.replace("|", " ").replace(";", " ")
+            "$app|$pkg|${it.timestamp}|${it.endTime}|$content"
+        }
+        
+        val serialized = logStrings.joinToString(";")
+        prefs.edit().putString(KEY_AD_LOGS + "_ordered", serialized).apply()
+    }
+
+    fun getAdLogs(context: Context): List<AdLogEntry> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val serialized = prefs.getString(KEY_AD_LOGS + "_ordered", null) ?: return emptyList()
+        return serialized.split(";").filter { it.isNotBlank() }.mapNotNull {
+            val parts = it.split("|")
+            if (parts.size >= 5) {
+                AdLogEntry(
+                    appName = parts[0],
+                    packageName = parts[1],
+                    timestamp = parts[2].toLongOrNull() ?: 0L,
+                    endTime = parts[3].toLongOrNull() ?: 0L,
+                    content = parts[4]
+                )
+            } else if (parts.size == 4) {
+                // Backward compatibility
+                AdLogEntry(
+                    appName = parts[0],
+                    packageName = parts[1],
+                    timestamp = parts[2].toLongOrNull() ?: 0L,
+                    endTime = 0L,
+                    content = parts[3]
+                )
+            } else null
+        }
+    }
+
+    fun updateLastLogEndTime(context: Context, endTime: Long) {
+        val currentLogs = getAdLogs(context).toMutableList()
+        if (currentLogs.isNotEmpty()) {
+            val last = currentLogs[0]
+            if (last.endTime == 0L) {
+                currentLogs[0] = last.copy(endTime = endTime)
+                saveLogs(context, currentLogs)
+            }
+        }
+    }
+
+    private fun saveLogs(context: Context, logs: List<AdLogEntry>) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val logStrings = logs.take(MAX_LOG_ENTRIES).map { 
+            val app = it.appName.replace("|", " ").replace(";", " ")
+            val pkg = it.packageName.replace("|", " ").replace(";", " ")
+            val content = it.content.replace("|", " ").replace(";", " ")
+            "$app|$pkg|${it.timestamp}|${it.endTime}|$content"
+        }
+        val serialized = logStrings.joinToString(";")
+        prefs.edit().putString(KEY_AD_LOGS + "_ordered", serialized).apply()
+    }
+
+    fun clearAdLogs(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().remove(KEY_AD_LOGS + "_ordered").apply()
+    }
+
+    fun getThemeMode(context: Context): ThemeMode {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val stored = prefs.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.storageValue) ?: ThemeMode.SYSTEM.storageValue
+        return ThemeMode.fromStorage(stored)
+    }
+
+    fun saveThemeMode(context: Context, themeMode: ThemeMode) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_THEME_MODE, themeMode.storageValue).apply()
     }
 }
 

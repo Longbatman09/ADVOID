@@ -12,27 +12,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = AdmuteYellowDark,
+    primary = AdmutePrimaryDark,
     onPrimary = Color.Black,
-    secondary = AdmuteTealDark,
+    secondary = AdmuteSecondaryDark,
     onSecondary = Color.Black,
-    tertiary = AdmuteTeal,
+    tertiary = AdmutePrimaryDark,
     background = AdmuteDarkBackground,
     onBackground = Color.White,
-    surface = AdmuteDarkBackground,
+    surface = AdmuteSurfaceDark,
     onSurface = Color.White
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = AdmuteYellow,
-    onPrimary = Color.Black,
-    secondary = AdmuteTeal,
-    onSecondary = Color.Black,
-    tertiary = AdmuteTealDark,
+    primary = AdmutePrimaryLight,
+    onPrimary = Color.White,
+    secondary = AdmuteSecondaryLight,
+    onSecondary = Color.White,
+    tertiary = AdmutePrimaryLight,
     background = AdmuteLightBackground,
-    onBackground = Color.Black,
-    surface = Color.White,
-    onSurface = Color.Black
+    onBackground = Color(0xFF23847d),
+    surface = AdmuteSurfaceLight,
+    onSurface = Color(0xFF23847d)
 )
 
 @Composable

@@ -2,11 +2,17 @@ package com.example.admute.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val AdmuteYellow = Color(0xFFF2ED68)
-val AdmuteTeal = Color(0xFF71C9BA)
+val AdmuteLightBlue = Color(0xFF7DB8DE)
+val AdmuteBlackBackground = Color(0xFF111716)
 
-val AdmuteYellowDark = Color(0xFFCAC655)
-val AdmuteTealDark = Color(0xFF56A296)
+// Light mode colors
+val AdmutePrimaryLight = Color(0xFF23847d) // Teal color
+val AdmuteSecondaryLight = Color(0xFF23847d)
+val AdmuteSurfaceLight = Color(0xFFFFFFFF) // White
+val AdmuteLightBackground = Color(0xFFFFFFFF) // White
 
-val AdmuteLightBackground = Color(0xFFFFFDE8)
-val AdmuteDarkBackground = Color(0xFF111716)
+// Dark mode colors
+val AdmutePrimaryDark = Color(0xFFC7BE3A)
+val AdmuteSecondaryDark = Color(0xFFC7BE3A)
+val AdmuteSurfaceDark = Color(0xFF0F2B26)
+val AdmuteDarkBackground = Color(0xFF0F2B26)
