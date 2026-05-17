@@ -7,7 +7,8 @@ import android.content.pm.PackageManager
 import android.content.pm.PackageManager.NameNotFoundException
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
@@ -16,11 +17,6 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.OpenableColumns
 import android.provider.Settings
-import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.Spinner
-import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -34,7 +30,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
@@ -42,7 +40,6 @@ import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -50,7 +47,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -64,8 +60,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.core.LinearEasing
@@ -75,28 +71,37 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -108,19 +113,23 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.math.abs
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
+import com.example.admute.analytics.AnalyticsManager
 import com.example.admute.detection.AdKeywordRules
 import com.example.admute.detection.WhitelistedApps
 import com.example.admute.settings.AdMuteSettings
@@ -130,10 +139,11 @@ import com.example.admute.settings.NotificationSoundSettings
 import com.example.admute.settings.NotificationSoundSource
 import com.example.admute.settings.StockNotificationSound
 import com.example.admute.settings.ThemeMode
-import com.example.admute.ui.theme.ADMUTETheme
+import com.example.admute.ui.theme.ADVOIDTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 
@@ -149,6 +159,7 @@ enum class SetupStep {
     COOLDOWN,
     NOTIFICATION_SOUND,
     LOGS,
+    MODIFY_KEYWORDS,
     RUNNING,
     ABOUT,
     THEME
@@ -172,6 +183,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AnalyticsManager.initialize(this)
         refreshPermissionStates()
         enableEdgeToEdge()
         setContent {
@@ -184,13 +196,15 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.DARK -> true
                 ThemeMode.SYSTEM -> systemDarkTheme
             }
-            ADMUTETheme(darkTheme = shouldUseDarkTheme) {
+            ADVOIDTheme(darkTheme = shouldUseDarkTheme) {
+                val donationUrl = "https://github.com/sponsors/Longbatman09"
                 var setupStep by remember {
                     mutableStateOf(
                         if (AdMuteSettings.isSetupCompleted(this@MainActivity)) SetupStep.RUNNING else SetupStep.INTRO
                     )
                 }
-                var isPaused by remember { mutableStateOf(false) }
+                var showSetupDonationDialog by remember { mutableStateOf(false) }
+                var isPaused by remember { mutableStateOf(AdMuteSettings.isAppPaused(this@MainActivity)) }
                 var selectedWhitelist by remember {
                     mutableStateOf(WhitelistedApps.getSelected(this@MainActivity))
                 }
@@ -209,23 +223,17 @@ class MainActivity : ComponentActivity() {
                         delay(1000L)
                     }
                 }
-
-                LaunchedEffect(
-                    setupStep,
-                    isPostNotificationsGranted,
-                    isNotificationAccessGranted,
-                    isBatteryOptimizationIgnored
-                ) {
-                    if (
-                        setupStep == SetupStep.DETECTION &&
-                        isPostNotificationsGranted &&
-                        isNotificationAccessGranted &&
-                        isBatteryOptimizationIgnored
-                    ) {
-                        AdMuteSettings.saveSetupCompleted(this@MainActivity, true)
-                        setupStep = SetupStep.RUNNING
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        val latestPaused = AdMuteSettings.isAppPaused(this@MainActivity)
+                        if (latestPaused != isPaused) {
+                            isPaused = latestPaused
+                        }
+                        delay(1000L)
                     }
                 }
+
+
 
                 BackHandler(enabled = setupStep == SetupStep.WHITELIST || setupStep == SetupStep.MANAGE_WHITELIST) {
                     setupStep = if (isSetupCompleted) {
@@ -244,56 +252,97 @@ class MainActivity : ComponentActivity() {
                         label = "screen-transition"
                     ) { targetStep ->
                         when (targetStep) {
-                            SetupStep.INTRO -> IntroductionScreen(
-                                onStartSetup = { setupStep = SetupStep.WHITELIST },
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                            SetupStep.WHITELIST -> WhitelistSelectionScreen(
-                                currentSelection = selectedWhitelist,
-                                onContinue = { selection ->
-                                    WhitelistedApps.saveSelected(this@MainActivity, selection)
-                                    selectedWhitelist = WhitelistedApps.getSelected(this@MainActivity)
-                                    setupStep = SetupStep.DETECTION
-                                },
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                            SetupStep.MANAGE_WHITELIST -> WhitelistSelectionScreen(
-                                currentSelection = selectedWhitelist,
-                                continueLabel = "Save and return",
-                                onContinue = { selection ->
-                                    WhitelistedApps.saveSelected(this@MainActivity, selection)
-                                    selectedWhitelist = WhitelistedApps.getSelected(this@MainActivity)
-                                    setupStep = SetupStep.RUNNING
-                                },
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                            SetupStep.DETECTION -> DetectionSetupScreen(
-                                keywordsPreview = AdKeywordRules.all().joinToString(),
-                                postNotificationsGranted = isPostNotificationsGranted,
-                                notificationAccessGranted = isNotificationAccessGranted,
-                                batteryOptimizationGranted = isBatteryOptimizationIgnored,
-                                onRequestPostNotifications = {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            SetupStep.INTRO -> {
+                                LaunchedEffect(Unit) { AnalyticsManager.logScreenView("Introduction", "MainActivity") }
+                                IntroductionScreen(
+                                    onStartSetup = { setupStep = SetupStep.WHITELIST },
+                                    modifier = Modifier.padding(innerPadding)
+                                )
+                            }
+                            SetupStep.WHITELIST -> {
+                                LaunchedEffect(Unit) { AnalyticsManager.logScreenView("WhitelistSelection", "MainActivity") }
+                                WhitelistSelectionScreen(
+                                    currentSelection = selectedWhitelist,
+                                    onContinue = { selection ->
+                                        WhitelistedApps.saveSelected(this@MainActivity, selection)
+                                        selectedWhitelist = WhitelistedApps.getSelected(this@MainActivity)
+                                        AnalyticsManager.logSettingsChanged("whitelist", selection.size.toString())
+                                        setupStep = SetupStep.DETECTION
+                                    },
+                                    modifier = Modifier.padding(innerPadding)
+                                )
+                            }
+                            SetupStep.MANAGE_WHITELIST -> {
+                                LaunchedEffect(Unit) { AnalyticsManager.logScreenView("ManageWhitelist", "MainActivity") }
+                                WhitelistSelectionScreen(
+                                    currentSelection = selectedWhitelist,
+                                    continueLabel = "Save and return",
+                                    onContinue = { selection ->
+                                        WhitelistedApps.saveSelected(this@MainActivity, selection)
+                                        selectedWhitelist = WhitelistedApps.getSelected(this@MainActivity)
+                                        AnalyticsManager.logSettingsChanged("whitelist", selection.size.toString())
+                                        setupStep = SetupStep.RUNNING
+                                    },
+                                    modifier = Modifier.padding(innerPadding)
+                                )
+                            }
+                            SetupStep.DETECTION -> {
+                                LaunchedEffect(Unit) { AnalyticsManager.logScreenView("DetectionSetup", "MainActivity") }
+                                DetectionSetupScreen(
+                                    keywordsPreview = AdKeywordRules.all(this@MainActivity).joinToString(),
+                                    postNotificationsGranted = isPostNotificationsGranted,
+                                    notificationAccessGranted = isNotificationAccessGranted,
+                                    batteryOptimizationGranted = isBatteryOptimizationIgnored,
+                                    onRequestPostNotifications = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                        }
+                                    },
+                                    onOpenNotificationAccess = {
+                                        startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                                    },
+                                    onRequestDisableBatteryOptimization = { requestDisableBatteryOptimization() },
+                                    onSetupComplete = {
+                                        AdMuteSettings.saveSetupCompleted(this@MainActivity, true)
+                                        if (!AdMuteSettings.isSetupDonationPromptShown(this@MainActivity)) {
+                                            showSetupDonationDialog = true
+                                            AdMuteSettings.saveSetupDonationPromptShown(this@MainActivity, true)
+                                        }
+                                        setupStep = SetupStep.RUNNING
+                                    },
+                                    modifier = Modifier.padding(innerPadding)
+                                )
+                            }
+                            SetupStep.RUNNING, SetupStep.COOLDOWN, SetupStep.LOGS, SetupStep.MODIFY_KEYWORDS, SetupStep.ABOUT, SetupStep.THEME -> Box(modifier = Modifier.fillMaxSize()) {
+                                LaunchedEffect(setupStep) {
+                                    val screenName = when(setupStep) {
+                                        SetupStep.RUNNING -> "Running"
+                                        SetupStep.COOLDOWN -> "CooldownSettings"
+                                        SetupStep.LOGS -> "AdLogs"
+                                        SetupStep.MODIFY_KEYWORDS -> "ModifyKeywords"
+                                        SetupStep.ABOUT -> "About"
+                                        SetupStep.THEME -> "ThemeSelection"
+                                        else -> "Unknown"
                                     }
-                                },
-                                onOpenNotificationAccess = {
-                                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                                },
-                                onRequestDisableBatteryOptimization = { requestDisableBatteryOptimization() },
-                                modifier = Modifier.padding(innerPadding)
-                            )
-                            SetupStep.RUNNING, SetupStep.COOLDOWN, SetupStep.LOGS, SetupStep.ABOUT, SetupStep.THEME -> Box(modifier = Modifier.fillMaxSize()) {
+                                    AnalyticsManager.logScreenView(screenName, "MainActivity")
+                                }
                                 RunningScreen(
                                     nowPlayingInfo = nowPlayingInfo,
                                     onChangeWhitelist = { setupStep = SetupStep.MANAGE_WHITELIST },
                                     onChangeCooldown = { setupStep = SetupStep.COOLDOWN },
                                     onModifyNotificationSounds = { setupStep = SetupStep.NOTIFICATION_SOUND },
                                     onViewLogs = { setupStep = SetupStep.LOGS },
+                                    onModifyKeywords = { setupStep = SetupStep.MODIFY_KEYWORDS },
                                     onViewAbout = { setupStep = SetupStep.ABOUT },
                                     onChangeTheme = { setupStep = SetupStep.THEME },
                                     isPaused = isPaused,
-                                    onPauseToggle = { isPaused = !isPaused },
+                                    onPauseToggle = {
+                                        val newState = !isPaused
+                                        isPaused = newState
+                                        AdMuteSettings.saveAppPaused(this@MainActivity, newState)
+                                        AnalyticsManager.logAction(if (newState) "pause_app" else "resume_app")
+                                    },
+                                    useDarkTheme = shouldUseDarkTheme,
                                     modifier = Modifier.padding(innerPadding)
                                 )
                                 AnimatedVisibility(
@@ -306,6 +355,7 @@ class MainActivity : ComponentActivity() {
                                         onSave = { minutes ->
                                             AdMuteSettings.saveCooldownMinutes(this@MainActivity, minutes)
                                             cooldownMinutes = AdMuteSettings.getCooldownMinutes(this@MainActivity)
+                                            AnalyticsManager.logSettingsChanged("cooldown_minutes", minutes.toString())
                                             setupStep = SetupStep.RUNNING
                                         },
                                         onBack = { setupStep = SetupStep.RUNNING },
@@ -318,6 +368,16 @@ class MainActivity : ComponentActivity() {
                                     exit = fadeOut(animationSpec = tween(durationMillis = 220))
                                 ) {
                                     AdLogsScreen(
+                                        onBack = { setupStep = SetupStep.RUNNING },
+                                        modifier = Modifier.padding(innerPadding)
+                                    )
+                                }
+                                AnimatedVisibility(
+                                    visible = setupStep == SetupStep.MODIFY_KEYWORDS,
+                                    enter = fadeIn(animationSpec = tween(durationMillis = 240)),
+                                    exit = fadeOut(animationSpec = tween(durationMillis = 220))
+                                ) {
+                                    ModifyKeywordsScreen(
                                         onBack = { setupStep = SetupStep.RUNNING },
                                         modifier = Modifier.padding(innerPadding)
                                     )
@@ -338,27 +398,33 @@ class MainActivity : ComponentActivity() {
                                         onThemeSelected = { newThemeMode ->
                                             themeMode = newThemeMode
                                             AdMuteSettings.saveThemeMode(this@MainActivity, newThemeMode)
+                                            AnalyticsManager.logSettingsChanged("theme_mode", newThemeMode.name)
                                         },
                                         onDismiss = { setupStep = SetupStep.RUNNING }
                                     )
                                 }
                             }
-                            SetupStep.NOTIFICATION_SOUND -> NotificationSoundSettingsScreen(
-                                currentSettings = notificationSoundMode,
-                                onSave = { settings ->
-                                    AdMuteSettings.saveNotificationSoundSettings(this@MainActivity, settings)
-                                    notificationSoundMode = AdMuteSettings.getNotificationSoundSettings(this@MainActivity)
-                                    setupStep = SetupStep.RUNNING
-                                },
-                                onBack = { setupStep = SetupStep.RUNNING },
-                                modifier = Modifier.padding(innerPadding)
-                            )
+                            SetupStep.NOTIFICATION_SOUND -> {
+                                LaunchedEffect(Unit) { AnalyticsManager.logScreenView("NotificationSoundSettings", "MainActivity") }
+                                NotificationSoundSettingsScreen(
+                                    currentSettings = notificationSoundMode,
+                                    onSave = { settings ->
+                                        AdMuteSettings.saveNotificationSoundSettings(this@MainActivity, settings)
+                                        notificationSoundMode = AdMuteSettings.getNotificationSoundSettings(this@MainActivity)
+                                        AnalyticsManager.logSettingsChanged("notification_sounds", "updated")
+                                        setupStep = SetupStep.RUNNING
+                                    },
+                                    onBack = { setupStep = SetupStep.RUNNING },
+                                    modifier = Modifier.padding(innerPadding)
+                                )
+                            }
                         }
                     }
                 }
                 
                 if (
                     setupStep == SetupStep.LOGS ||
+                    setupStep == SetupStep.MODIFY_KEYWORDS ||
                     setupStep == SetupStep.ABOUT ||
                     setupStep == SetupStep.NOTIFICATION_SOUND ||
                     setupStep == SetupStep.THEME
@@ -366,6 +432,32 @@ class MainActivity : ComponentActivity() {
                     BackHandler {
                         setupStep = SetupStep.RUNNING
                     }
+                }
+
+                if (showSetupDonationDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showSetupDonationDialog = false },
+                        title = { Text("Support ADVOID") },
+                        text = { Text("Thanks for completing setup. ADVOID is free to use — please consider supporting development with a donation.") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    AnalyticsManager.logAction("donate_click")
+                                    runCatching {
+                                        startActivity(Intent(Intent.ACTION_VIEW, donationUrl.toUri()))
+                                    }
+                                    showSetupDonationDialog = false
+                                }
+                            ) {
+                                Text("Donate")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showSetupDonationDialog = false }) {
+                                Text("Maybe later")
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -437,33 +529,73 @@ fun IntroductionScreen(
     onStartSetup: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    AppScreenContainer(
-        title = "Welcome to ADMUTE",
-        subtitle = "Detects ad notifications and mutes media automatically.",
+    Box(
         modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 22.dp, vertical = 28.dp)
     ) {
-        Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+            Spacer(modifier = Modifier.weight(0.48f))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 26.dp, vertical = 36.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(22.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.branding),
+                        contentDescription = "ADVOID branding",
+                        modifier = Modifier
+                            .fillMaxWidth(0.62f)
+                            .height(72.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Text(
+                        text = "ADVOID is an app which allows users\nto block disruptive ad audio automatically.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 38.sp
+                    )
+                    Text(
+                        text = "ADVOID helps users enjoy uninterrupted listening by muting ads from selected music apps and restoring media volume smoothly.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 38.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Button(
+                onClick = onStartSetup,
+                modifier = Modifier
+                    .fillMaxWidth(0.86f)
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
+                )
             ) {
                 Text(
-                    text = "How it works",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "Start Setup",
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold
                 )
-                Text(
-                    text = "1. Select music apps to monitor.\n2. Grant required permissions.\n3. ADMUTE handles mute/unmute with cooldown.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
             }
-        }
-        Spacer(modifier = Modifier.weight(1f))
-        Button(onClick = onStartSetup, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-            Text(text = "Start setup")
         }
     }
 }
@@ -472,17 +604,19 @@ fun IntroductionScreen(
 fun WhitelistSelectionScreen(
     currentSelection: Set<String>,
     onContinue: (Set<String>) -> Unit,
-    continueLabel: String = "Continue",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    continueLabel: String = "Continue"
 ) {
-    var showApps by remember { mutableStateOf(false) }
     var otherAppsSearchQuery by remember { mutableStateOf("") }
     var isSearchFocused by remember { mutableStateOf(false) }
     var keyboardWasVisibleInSearchSession by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val density = LocalDensity.current
     val recommendedPackages = remember { WhitelistedApps.recommendedPackages().values.toSet() }
-    var selectedPackages by remember(currentSelection) { mutableStateOf(currentSelection) }
+    // If there is no saved selection (first-run), default to selecting all recommended packages
+    var selectedPackages by remember(currentSelection, recommendedPackages) {
+        mutableStateOf(if (currentSelection.isEmpty()) recommendedPackages else currentSelection)
+    }
     val context = LocalContext.current
     val installedApps by produceState<List<InstalledApp>?>(initialValue = null, context, recommendedPackages) {
         value = withContext(Dispatchers.IO) {
@@ -492,18 +626,14 @@ fun WhitelistSelectionScreen(
     val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
     val shouldPrioritizeOtherApps = isSearchFocused && isKeyboardVisible
     val appsFadeInAlpha by animateFloatAsState(
-        targetValue = if (showApps) 1f else 0f,
+        targetValue = if (installedApps == null) 0f else 1f,
         animationSpec = tween(durationMillis = 450),
         label = "apps-fade-in"
     )
 
     if (installedApps == null) {
-        showApps = false
         WhitelistLoadingScreen(modifier = modifier)
         return
-    }
-    LaunchedEffect(installedApps) {
-        showApps = true
     }
 
     val resolvedApps = installedApps.orEmpty()
@@ -799,6 +929,76 @@ private fun AppSelectionRow(
 }
 
 @Composable
+fun PermissionStepScreen(
+    emoji: String,
+    title: String,
+    description: String,
+    actionDescription: String,
+    granted: Boolean,
+    grantActionLabel: String,
+    onGrantAction: () -> Unit,
+    onContinueAction: () -> Unit,
+    footerText: String
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = emoji,
+            fontSize = 64.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .height(4.dp)
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = actionDescription,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = {
+                if (granted) onContinueAction() else onGrantAction()
+            },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(if (granted) "Continue" else grantActionLabel)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = footerText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 fun DetectionSetupScreen(
     keywordsPreview: String,
     postNotificationsGranted: Boolean,
@@ -807,85 +1007,113 @@ fun DetectionSetupScreen(
     onRequestPostNotifications: () -> Unit,
     onOpenNotificationAccess: () -> Unit,
     onRequestDisableBatteryOptimization: () -> Unit,
+    onSetupComplete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val allGranted = postNotificationsGranted && notificationAccessGranted && batteryOptimizationGranted
-    AppScreenContainer(
-        title = "Detection setup",
-        subtitle = "Grant permissions so ADMUTE can detect ad notifications reliably.",
+    var currentStep by remember { mutableStateOf(0) }
+
+    AnimatedContent(
+        targetState = currentStep,
+        transitionSpec = {
+            slideInHorizontally(animationSpec = tween(400)) { width -> width } + fadeIn(animationSpec = tween(400)) togetherWith
+            slideOutHorizontally(animationSpec = tween(400)) { width -> -width } + fadeOut(animationSpec = tween(400))
+        },
+        label = "permission-transition",
         modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            PermissionStatusCard(
-                label = "Push notifications",
-                granted = postNotificationsGranted,
-                actionLabel = "Grant permission",
-                onAction = onRequestPostNotifications
-            )
-            PermissionStatusCard(
-                label = "Notification access",
-                granted = notificationAccessGranted,
-                actionLabel = "Open access settings",
-                onAction = onOpenNotificationAccess
-            )
-            PermissionStatusCard(
-                label = "Battery optimization",
-                granted = batteryOptimizationGranted,
-                actionLabel = "Disable optimization",
-                onAction = onRequestDisableBatteryOptimization
-            )
-            Card(shape = RoundedCornerShape(14.dp)) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(text = "Keyword list preview", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Text(text = keywordsPreview, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+    ) { step ->
+        when (step) {
+            0 -> {
+                PermissionStepScreen(
+                    emoji = "🔔",
+                    title = "Push notifications",
+                    description = "ADVOID needs push notifications to let you know about background status.",
+                    actionDescription = "Please grant the notification permission.",
+                    granted = postNotificationsGranted,
+                    grantActionLabel = "Grant permission",
+                    onGrantAction = onRequestPostNotifications,
+                    onContinueAction = { currentStep = 1 },
+                    footerText = "ADVOID will not be able to show background status without this permission."
+                )
             }
-            if (allGranted) {
-                AssistChip(onClick = {}, label = { Text("All set. ADMUTE can now monitor selected apps.") })
+            1 -> {
+                PermissionStepScreen(
+                    emoji = "💬",
+                    title = "Notification access",
+                    description = "ADVOID needs notification access to detect ads from other apps.",
+                    actionDescription = "Open settings and allow notification access for ADVOID.",
+                    granted = notificationAccessGranted,
+                    grantActionLabel = "Open access settings",
+                    onGrantAction = onOpenNotificationAccess,
+                    onContinueAction = { currentStep = 2 },
+                    footerText = "ADVOID will not function correctly without this permission."
+                )
+            }
+            2 -> {
+                PermissionStepScreen(
+                    emoji = "🔋",
+                    title = "Battery optimization",
+                    description = "Disable battery optimization so ADVOID can run continuously without being killed by the system.",
+                    actionDescription = "Allow ADVOID to run unrestricted.",
+                    granted = batteryOptimizationGranted,
+                    grantActionLabel = "Disable optimization",
+                    onGrantAction = onRequestDisableBatteryOptimization,
+                    onContinueAction = { currentStep = 3 },
+                    footerText = "ADVOID may be stopped by the system without this permission."
+                )
+            }
+            3 -> {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "✅",
+                        fontSize = 64.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "All set!",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(48.dp)
+                            .height(4.dp)
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "Permissions granted. ADVOID can now monitor selected apps.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Card(shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = "Keyword list preview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(text = keywordsPreview, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Button(
+                        onClick = onSetupComplete,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("Complete Setup")
+                    }
+                }
             }
         }
     }
 }
 
-@Composable
-private fun PermissionStatusCard(
-    label: String,
-    granted: Boolean,
-    actionLabel: String,
-    onAction: () -> Unit
-) {
-    ElevatedCard(shape = RoundedCornerShape(14.dp)) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .background(
-                            if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            CircleShape
-                        )
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            }
-            Text(
-                text = if (granted) "Granted" else "Not granted",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (!granted) {
-                OutlinedButton(onClick = onAction, modifier = Modifier.fillMaxWidth()) {
-                    Text(actionLabel)
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun RunningScreen(
@@ -894,9 +1122,11 @@ fun RunningScreen(
     onChangeCooldown: () -> Unit,
     onModifyNotificationSounds: () -> Unit,
     onViewLogs: () -> Unit,
+    onModifyKeywords: () -> Unit,
     onViewAbout: () -> Unit,
     isPaused: Boolean,
     onPauseToggle: () -> Unit,
+    useDarkTheme: Boolean,
     modifier: Modifier = Modifier,
     onChangeTheme: () -> Unit = {}
 ) {
@@ -916,12 +1146,13 @@ fun RunningScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    ActionButtonLeftAligned("Manage whitelist apps", onChangeWhitelist, enableMarquee = true)
-                    ActionButtonLeftAligned("Change cooldown", onChangeCooldown, enableMarquee = true)
-                    ActionButtonLeftAligned("Modify notification sounds", onModifyNotificationSounds, enableMarquee = true)
-                    ActionButtonLeftAligned("Change theme", onChangeTheme, enableMarquee = true)
-                    ActionButtonLeftAligned("View ad detection logs", onViewLogs, enableMarquee = true)
-                    ActionButtonLeftAligned("About", onViewAbout, enableMarquee = true)
+                    ActionButtonLeftAligned("Manage whitelist apps", onChangeWhitelist, enableMarquee = true, iconRes = R.drawable.wl, useDarkTheme = useDarkTheme)
+                    ActionButtonLeftAligned("Change cooldown", onChangeCooldown, enableMarquee = true, iconRes = R.drawable.cd, useDarkTheme = useDarkTheme)
+                    ActionButtonLeftAligned("Modify notification sounds", onModifyNotificationSounds, enableMarquee = true, iconRes = R.drawable.ns, useDarkTheme = useDarkTheme)
+                    ActionButtonLeftAligned("Change theme", onChangeTheme, enableMarquee = true, iconRes = R.drawable.theme, useDarkTheme = useDarkTheme)
+                    ActionButtonLeftAligned("View ad detection logs", onViewLogs, enableMarquee = true, iconRes = R.drawable.log, useDarkTheme = useDarkTheme)
+                    ActionButtonLeftAligned("Modify Keywords", onModifyKeywords, enableMarquee = true, iconRes = R.drawable.log, useDarkTheme = useDarkTheme)
+                    ActionButtonLeftAligned("About", onViewAbout, enableMarquee = true, iconRes = R.drawable.about, useDarkTheme = useDarkTheme)
                 }
                 Column(
                     modifier = Modifier
@@ -932,13 +1163,15 @@ fun RunningScreen(
                     NowPlayingInfoBox(nowPlayingInfo = nowPlayingInfo)
                     Spacer(modifier = Modifier.weight(1f))
                     ActionButtonLeftAligned(
-                        if (isPaused) "Resume ADMUTE" else "Pause ADMUTE",
+                        if (isPaused) "Resume ADVOID" else "Pause ADVOID",
                         onPauseToggle,
-                        enableMarquee = true
+                        enableMarquee = true,
+                        iconRes = R.drawable.pause,
+                        useDarkTheme = useDarkTheme
                     )
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "ADBLOCK IS CURRENTLY RUNNING",
+                            text = "ADVOID IS CURRENTLY RUNNING",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -954,22 +1187,25 @@ fun RunningScreen(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                ActionButtonLeftAligned("Manage whitelist apps", onChangeWhitelist)
-                ActionButtonLeftAligned("Change cooldown", onChangeCooldown)
-                ActionButtonLeftAligned("Modify notification sounds", onModifyNotificationSounds)
-                ActionButtonLeftAligned("Change theme", onChangeTheme)
-                ActionButtonLeftAligned("View ad detection logs", onViewLogs)
-                ActionButtonLeftAligned("About", onViewAbout)
+                ActionButtonLeftAligned("Manage whitelist apps", onChangeWhitelist, iconRes = R.drawable.wl, useDarkTheme = useDarkTheme)
+                ActionButtonLeftAligned("Change cooldown", onChangeCooldown, iconRes = R.drawable.cd, useDarkTheme = useDarkTheme)
+                ActionButtonLeftAligned("Modify notification sounds", onModifyNotificationSounds, iconRes = R.drawable.ns, useDarkTheme = useDarkTheme)
+                ActionButtonLeftAligned("Change theme", onChangeTheme, iconRes = R.drawable.theme, useDarkTheme = useDarkTheme)
+                ActionButtonLeftAligned("View ad detection logs", onViewLogs, iconRes = R.drawable.log, useDarkTheme = useDarkTheme)
+                ActionButtonLeftAligned("Modify Keywords", onModifyKeywords, iconRes = R.drawable.log, useDarkTheme = useDarkTheme)
+                ActionButtonLeftAligned("About", onViewAbout, iconRes = R.drawable.about, useDarkTheme = useDarkTheme)
                 NowPlayingInfoBox(nowPlayingInfo = nowPlayingInfo)
                 Spacer(modifier = Modifier.weight(1f))
-                ActionButtonLeftAligned(
-                    if (isPaused) "Resume ADMUTE" else "Pause ADMUTE",
-                    onPauseToggle
-                )
+                    ActionButtonLeftAligned(
+                        if (isPaused) "Resume ADVOID" else "Pause ADVOID",
+                        onPauseToggle,
+                        iconRes = R.drawable.pause,
+                        useDarkTheme = useDarkTheme
+                    )
                 // Bottom-centered running status
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "ADMUTE IS CURRENTLY RUNNING",
+                        text = "ADVOID IS CURRENTLY RUNNING",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 8.dp),
@@ -993,7 +1229,7 @@ fun RunningScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = "ADMUTE IS PAUSED",
+                        text = "ADVOID IS PAUSED",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -1017,6 +1253,7 @@ fun AdLogsScreen(
 ) {
     val context = LocalContext.current
     var logs by remember { mutableStateOf(AdMuteSettings.getAdLogs(context)) }
+    var showClearLogsDialog by remember { mutableStateOf(false) }
     val dateFormatter = remember { SimpleDateFormat("HH:mm:ss, dd MMM", Locale.getDefault()) }
 
     // Calculate total duration
@@ -1052,30 +1289,32 @@ fun AdLogsScreen(
         subtitle = "History of detected ads and muted apps.",
         modifier = modifier.background(MaterialTheme.colorScheme.background)
     ) {
-        // Total time saved box
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        if (logs.isNotEmpty()) {
+            // Total time saved box
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Text(
-                    text = "Total Time ADBlock Saved",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = totalDurationFormatted,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Total Time ADBlock Saved",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = totalDurationFormatted,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
 
@@ -1149,11 +1388,16 @@ fun AdLogsScreen(
         ) {
             OutlinedButton(
                 onClick = {
-                    AdMuteSettings.clearAdLogs(context)
-                    logs = emptyList()
+                    AnalyticsManager.logAction("clear_logs")
+                    showClearLogsDialog = true
                 },
+                enabled = logs.isNotEmpty(),
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                )
             ) {
                 Text("Clear Logs")
             }
@@ -1166,6 +1410,30 @@ fun AdLogsScreen(
             }
         }
     }
+
+    if (showClearLogsDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearLogsDialog = false },
+            title = { Text("Clear logs?") },
+            text = { Text("Are you sure you want to clear all AD Detection Logs? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        AdMuteSettings.clearAdLogs(context)
+                        logs = emptyList()
+                        showClearLogsDialog = false
+                    }
+                ) {
+                    Text("Clear")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearLogsDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1173,15 +1441,33 @@ fun AdLogsScreen(
 private fun ActionButtonLeftAligned(
     title: String,
     onClick: () -> Unit,
-    enableMarquee: Boolean = false
+    enableMarquee: Boolean = false,
+    iconRes: Int? = null,
+    useDarkTheme: Boolean = false
 ) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val themedIconBitmap = remember(iconRes, useDarkTheme, context, configuration) {
+        iconRes?.let { resId ->
+            val config = Configuration(configuration).apply {
+                val nightMode = if (useDarkTheme) {
+                    Configuration.UI_MODE_NIGHT_YES
+                } else {
+                    Configuration.UI_MODE_NIGHT_NO
+                }
+                uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
+            }
+            val themedContext = context.createConfigurationContext(config)
+            ContextCompat.getDrawable(themedContext, resId)?.toBitmapSafely()?.asImageBitmap()
+                ?: ContextCompat.getDrawable(context, resId)?.toBitmapSafely()?.asImageBitmap()
+        }
+    }
     Button(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text = title,
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
@@ -1194,9 +1480,25 @@ private fun ActionButtonLeftAligned(
                         Modifier
                     }
                 ),
-            textAlign = TextAlign.Start,
-            maxLines = 1
-        )
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (iconRes != null && themedIconBitmap != null) {
+                Image(
+                    bitmap = themedIconBitmap,
+                    contentDescription = "$title icon",
+                    modifier = Modifier.size(24.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+            }
+            Text(
+                text = title,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Start,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -1213,7 +1515,7 @@ private fun NowPlayingInfoBox(nowPlayingInfo: NowPlayingInfo?) {
             try {
                 val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
                 BitmapFactory.decodeFile(path, opts)
-            } catch (t: Throwable) {
+            } catch (_: Throwable) {
                 null
             }
             }
@@ -1244,13 +1546,11 @@ private fun NowPlayingInfoBox(nowPlayingInfo: NowPlayingInfo?) {
                 Text(
                     text = "No media is playing currently",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         } else {
-            val info = nowPlayingInfo!!
+            val info = nowPlayingInfo
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1267,14 +1567,14 @@ private fun NowPlayingInfoBox(nowPlayingInfo: NowPlayingInfo?) {
                         Image(
                             bitmap = albumArtBitmap.asImageBitmap(),
                             contentDescription = "Album art",
-                            modifier = Modifier.matchParentSize(),
+                            modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
                             filterQuality = FilterQuality.High
                         )
                     } else {
                         Box(
                             modifier = Modifier
-                                .matchParentSize()
+                                .fillMaxSize()
                                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1494,6 +1794,76 @@ private fun NotificationSoundSettingsScreen(
     var inSound by remember(currentSettings) { mutableStateOf(currentSettings.inSound) }
     var outSound by remember(currentSettings) { mutableStateOf(currentSettings.outSound) }
     val context = LocalContext.current
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var previewPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    fun stopPreview() {
+        previewPlayer?.release()
+        previewPlayer = null
+    }
+
+    fun playPreview(config: NotificationSoundConfig) {
+        stopPreview()
+        when (config.source) {
+            NotificationSoundSource.OFF -> Unit
+            NotificationSoundSource.STOCK -> {
+                runCatching {
+                    val attributes = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                    val player = MediaPlayer.create(context, config.stockSound.resId, attributes, 0) ?: return@runCatching
+                    previewPlayer = player
+                    player.setOnCompletionListener {
+                        if (previewPlayer === it) previewPlayer = null
+                        it.release()
+                    }
+                    player.setOnErrorListener { mp, _, _ ->
+                        if (previewPlayer === mp) previewPlayer = null
+                        mp.release()
+                        true
+                    }
+                    player.start()
+                }
+            }
+            NotificationSoundSource.CUSTOM -> {
+                val uriText = config.customUri ?: return
+                runCatching {
+                    val player = MediaPlayer().apply {
+                        setDataSource(context, uriText.toUri())
+                        setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build()
+                        )
+                        setOnCompletionListener {
+                            if (previewPlayer === it) previewPlayer = null
+                            it.release()
+                        }
+                        setOnErrorListener { mp, _, _ ->
+                            if (previewPlayer === mp) previewPlayer = null
+                            mp.release()
+                            true
+                        }
+                        prepare()
+                        previewPlayer = this
+                        start()
+                    }
+                    player
+                }
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { stopPreview() }
+    }
+
+    BackHandler {
+        stopPreview()
+        onBack()
+    }
 
     val pickInSoundLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         val updated = uri?.let {
@@ -1505,6 +1875,7 @@ private fun NotificationSoundSettingsScreen(
             )
         } ?: inSound
         inSound = updated
+        if (uri != null) playPreview(updated)
     }
 
     val pickOutSoundLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -1517,6 +1888,7 @@ private fun NotificationSoundSettingsScreen(
             )
         } ?: outSound
         outSound = updated
+        if (uri != null) playPreview(updated)
     }
 
     AppScreenContainer(
@@ -1524,49 +1896,96 @@ private fun NotificationSoundSettingsScreen(
         subtitle = "Configure IN (ad detected) and OUT (ad ended) sounds.",
         modifier = modifier
     ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        val inSoundSection: @Composable () -> Unit = {
             SoundConfigSection(
                 title = "IN sound",
                 config = inSound,
                 stockOptions = listOf(StockNotificationSound.S1_IN, StockNotificationSound.S2_IN),
-                onSelectOff = { inSound = inSound.copy(source = NotificationSoundSource.OFF) },
+                onSelectOff = {
+                    inSound = inSound.copy(source = NotificationSoundSource.OFF)
+                    stopPreview()
+                },
                 onSelectStock = { selected ->
-                    inSound = inSound.copy(source = NotificationSoundSource.STOCK, stockSound = selected)
+                    val updated = inSound.copy(source = NotificationSoundSource.STOCK, stockSound = selected)
+                    inSound = updated
+                    playPreview(updated)
                 },
                 onSelectCustom = {
                     if (inSound.customUri != null) {
-                        inSound = inSound.copy(source = NotificationSoundSource.CUSTOM)
+                        val updated = inSound.copy(source = NotificationSoundSource.CUSTOM)
+                        inSound = updated
+                        playPreview(updated)
                     }
                 },
                 onPickCustom = { pickInSoundLauncher.launch(arrayOf("audio/*")) },
                 onClearCustom = {
                     inSound = inSound.copy(customUri = null, customDisplayName = null, source = NotificationSoundSource.OFF)
+                    stopPreview()
                 }
             )
+        }
 
+        val outSoundSection: @Composable () -> Unit = {
             SoundConfigSection(
                 title = "OUT sound",
                 config = outSound,
                 stockOptions = listOf(StockNotificationSound.S1_OUT, StockNotificationSound.S2_OUT),
-                onSelectOff = { outSound = outSound.copy(source = NotificationSoundSource.OFF) },
+                onSelectOff = {
+                    outSound = outSound.copy(source = NotificationSoundSource.OFF)
+                    stopPreview()
+                },
                 onSelectStock = { selected ->
-                    outSound = outSound.copy(source = NotificationSoundSource.STOCK, stockSound = selected)
+                    val updated = outSound.copy(source = NotificationSoundSource.STOCK, stockSound = selected)
+                    outSound = updated
+                    playPreview(updated)
                 },
                 onSelectCustom = {
                     if (outSound.customUri != null) {
-                        outSound = outSound.copy(source = NotificationSoundSource.CUSTOM)
+                        val updated = outSound.copy(source = NotificationSoundSource.CUSTOM)
+                        outSound = updated
+                        playPreview(updated)
                     }
                 },
                 onPickCustom = { pickOutSoundLauncher.launch(arrayOf("audio/*")) },
                 onClearCustom = {
                     outSound = outSound.copy(customUri = null, customDisplayName = null, source = NotificationSoundSource.OFF)
+                    stopPreview()
                 }
             )
+        }
+
+        if (isLandscape) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    inSoundSection()
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    outSoundSection()
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                inSoundSection()
+                outSoundSection()
+            }
         }
         Button(
             onClick = { onSave(NotificationSoundSettings(inSound = inSound, outSound = outSound)) },
@@ -1575,13 +1994,21 @@ private fun NotificationSoundSettingsScreen(
         ) {
             Text("Save")
         }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+        OutlinedButton(
+            onClick = {
+                stopPreview()
+                onBack()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp)
+        ) {
             Text("Back")
         }
     }
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun SoundConfigSection(
     title: String,
     config: NotificationSoundConfig,
@@ -1605,12 +2032,7 @@ private fun SoundConfigSection(
         }
     }
     val selectedLabel = config.summaryLabel()
-    val selectedIndex = choices.indexOfFirst { it.label == selectedLabel }.coerceAtLeast(0)
-    val context = LocalContext.current
-    
-    val strokeColorInt = MaterialTheme.colorScheme.primary.toArgb()
-    val surfaceColorInt = MaterialTheme.colorScheme.surface.toArgb()
-    val textColorInt = MaterialTheme.colorScheme.onSurface.toArgb()
+    var dropdownExpanded by remember { mutableStateOf(false) }
 
     ElevatedCard(shape = RoundedCornerShape(14.dp)) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1620,77 +2042,37 @@ private fun SoundConfigSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            AndroidView(
-                modifier = Modifier.fillMaxWidth(),
-                factory = {
-                    Spinner(context).apply {
-                        adapter = ArrayAdapter(
-                            context,
-                            android.R.layout.simple_spinner_item,
-                            choices.map { choice -> choice.label }
-                        ).also { arrayAdapter ->
-                            arrayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                        }
-                        background = GradientDrawable().apply {
-                            shape = GradientDrawable.RECTANGLE
-                            cornerRadius = 12f * resources.displayMetrics.density
-                            setColor(surfaceColorInt)
-                            setStroke((1f * resources.displayMetrics.density).toInt(), strokeColorInt)
-                        }
-                        minimumHeight = (50f * resources.displayMetrics.density).toInt()
-                        setPadding(
-                            (14f * resources.displayMetrics.density).toInt(),
-                            (8f * resources.displayMetrics.density).toInt(),
-                            (14f * resources.displayMetrics.density).toInt(),
-                            (8f * resources.displayMetrics.density).toInt()
+            ExposedDropdownMenuBox(
+                expanded = dropdownExpanded,
+                onExpandedChange = { dropdownExpanded = !dropdownExpanded }
+            ) {
+                OutlinedTextField(
+                    value = selectedLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true),
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded)
+                    },
+                    textStyle = MaterialTheme.typography.bodyLarge
+                )
+                DropdownMenu(
+                    expanded = dropdownExpanded,
+                    onDismissRequest = { dropdownExpanded = false }
+                ) {
+                    choices.forEach { choice ->
+                        DropdownMenuItem(
+                            text = { Text(choice.label) },
+                            onClick = {
+                                dropdownExpanded = false
+                                choice.action.invoke()
+                            }
                         )
-                        setSelection(selectedIndex, false)
-                        onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                                (view as? TextView)?.setTextColor(textColorInt)
-                                choices.getOrNull(position)?.action?.invoke()
-                            }
-
-                            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-                        }
-                    }
-                },
-                update = { spinner ->
-                    val labels = choices.map { choice -> choice.label }
-                    @Suppress("UNCHECKED_CAST")
-                    val adapter = spinner.adapter as? ArrayAdapter<String>
-                    if (adapter == null || adapter.count != labels.size) {
-                        spinner.adapter = ArrayAdapter(
-                            context,
-                            android.R.layout.simple_spinner_item,
-                            labels
-                        ).also { arrayAdapter ->
-                            arrayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                        }
-                    } else {
-                        var changed = false
-                        for (index in labels.indices) {
-                            if (adapter.getItem(index) != labels[index]) {
-                                changed = true
-                                break
-                            }
-                        }
-                        if (changed) {
-                            adapter.clear()
-                            adapter.addAll(labels)
-                            adapter.notifyDataSetChanged()
-                        }
-                    }
-                    if (spinner.selectedItemPosition != selectedIndex) {
-                        spinner.setSelection(selectedIndex, false)
-                    }
-                    (spinner.selectedView as? TextView)?.apply {
-                        setTextColor(textColorInt)
-                        textSize = 18f
-                        setTypeface(typeface, android.graphics.Typeface.BOLD)
                     }
                 }
-            )
+            }
             OutlinedButton(onClick = onPickCustom, modifier = Modifier.fillMaxWidth()) {
                 Text("Upload custom sound")
             }
@@ -1753,7 +2135,7 @@ private fun Drawable.toBitmapSafely(): Bitmap {
     }
     val width = intrinsicWidth.takeIf { it > 0 } ?: 96
     val height = intrinsicHeight.takeIf { it > 0 } ?: 96
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     setBounds(0, 0, canvas.width, canvas.height)
     draw(canvas)
@@ -1779,12 +2161,217 @@ private fun android.content.ContentResolver.resolveDisplayName(uri: Uri): String
 }
 
 @Composable
+fun ModifyKeywordsScreen(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val defaultKeywords = remember { AdKeywordRules.default() }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val enabledDefaultKeywords = remember {
+        mutableStateOf(
+            defaultKeywords.filterNot {
+                AdMuteSettings.getDisabledDefaultAdKeywords(context).contains(it)
+            }
+        )
+    }
+    var lastListIndexBeforeInput by remember { mutableStateOf(0) }
+    var lastListOffsetBeforeInput by remember { mutableStateOf(0) }
+    var customKeywords by remember { mutableStateOf(AdMuteSettings.getCustomAdKeywords(context)) }
+    var newKeyword by remember { mutableStateOf("") }
+    var duplicateOrEmptyError by remember { mutableStateOf<String?>(null) }
+    var pendingDefaultDeleteKeyword by remember { mutableStateOf<String?>(null) }
+    var showRestoreDefaultsDialog by remember { mutableStateOf(false) }
+
+    AppScreenContainer(
+        title = "Modify Keywords",
+        subtitle = "Add or remove custom ad-detection keywords.",
+        modifier = modifier.background(MaterialTheme.colorScheme.background)
+    ) {
+        ElevatedCard(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Default keywords",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(enabledDefaultKeywords.value + customKeywords) { keyword ->
+                        val isDefault = enabledDefaultKeywords.value.contains(keyword)
+                        ElevatedCard(shape = RoundedCornerShape(12.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "$keyword (${if (isDefault) "Default" else "Custom"})",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(
+                                    onClick = {
+                                        if (isDefault) {
+                                            pendingDefaultDeleteKeyword = keyword
+                                        } else {
+                                            AdMuteSettings.removeCustomAdKeyword(context, keyword)
+                                            customKeywords = AdMuteSettings.getCustomAdKeywords(context)
+                                        }
+                                    }
+                                ) {
+                                    Text("Delete")
+                                }
+                            }
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = newKeyword,
+                    onValueChange = {
+                        newKeyword = it
+                        duplicateOrEmptyError = null
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focusState ->
+                            coroutineScope.launch {
+                                if (focusState.isFocused) {
+                                    lastListIndexBeforeInput = listState.firstVisibleItemIndex
+                                    lastListOffsetBeforeInput = listState.firstVisibleItemScrollOffset
+                                    listState.animateScrollToItem(0)
+                                } else {
+                                    listState.animateScrollToItem(lastListIndexBeforeInput, lastListOffsetBeforeInput)
+                                }
+                            }
+                        },
+                    singleLine = true,
+                    label = { Text("New keyword") }
+                )
+                duplicateOrEmptyError?.let { errorText ->
+                    Text(
+                        text = errorText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                Button(
+                    onClick = {
+                        val normalized = newKeyword.trim().lowercase()
+                        val added = AdMuteSettings.addCustomAdKeyword(context, newKeyword)
+                        if (added) {
+                            customKeywords = AdMuteSettings.getCustomAdKeywords(context)
+                            AnalyticsManager.logSettingsChanged("custom_keyword_added", normalized)
+                            newKeyword = ""
+                            duplicateOrEmptyError = null
+                        } else {
+                            duplicateOrEmptyError = "Keyword is empty or already exists."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Add Keyword")
+                }
+                OutlinedButton(
+                    onClick = { showRestoreDefaultsDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Restore Default Keywords")
+                }
+            }
+        }
+        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text("Back")
+        }
+    }
+
+    pendingDefaultDeleteKeyword?.let { keyword ->
+        AlertDialog(
+            onDismissRequest = { pendingDefaultDeleteKeyword = null },
+            title = { Text("Delete default keyword?") },
+            text = { Text("Are you sure you want to delete \"$keyword\" from detection keywords?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        AdMuteSettings.disableDefaultAdKeyword(context, keyword)
+                        enabledDefaultKeywords.value = defaultKeywords.filterNot {
+                            AdMuteSettings.getDisabledDefaultAdKeywords(context).contains(it)
+                        }
+                        pendingDefaultDeleteKeyword = null
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDefaultDeleteKeyword = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showRestoreDefaultsDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestoreDefaultsDialog = false },
+            title = { Text("Restore default keywords?") },
+            text = { Text("Are you sure you want to restore all default keywords? Any deleted default keywords will be added back.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        AdMuteSettings.restoreAllDefaultAdKeywords(context)
+                        enabledDefaultKeywords.value = defaultKeywords
+                        showRestoreDefaultsDialog = false
+                    }
+                ) {
+                    Text("Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreDefaultsDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
 fun AboutScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val context = LocalContext.current
+    val donationUrl = "https://github.com/sponsors/Longbatman09"
+    val donateLogo = painterResource(id = R.drawable.donate)
+    val versionLabel = remember(context) {
+        runCatching {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            packageInfo.versionName ?: "1.0"
+        }.getOrDefault("1.0")
+    }
+
     AppScreenContainer(
-        title = "About ADMUTE",
+        title = "About ADVOID",
         subtitle = "Information about the application.",
         modifier = modifier.background(MaterialTheme.colorScheme.background)
     ) {
@@ -1792,45 +2379,172 @@ fun AboutScreen(
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                val context = LocalContext.current
-                val appIcon = remember {
-                    context.packageManager.getApplicationIcon(context.packageName).toBitmapSafely().asImageBitmap()
-                }
-                Image(
-                    bitmap = appIcon,
-                    contentDescription = "App Icon",
+            if (isLandscape) {
+                Row(
                     modifier = Modifier
-                        .size(120.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "ADMUTE",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
+                        .fillMaxSize()
+                        .padding(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.branding),
+                            contentDescription = "ADVOID branding",
+                            modifier = Modifier
+                                .width(140.dp)
+                                .height(48.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Text(
+                            text = "Version $versionLabel",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "ADVOID is designed to detect ad notifications from your selected music apps and automatically mute your media volume, bringing peace to your listening experience.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Start
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment = Alignment.Start
+                            ) {
+                                Text(
+                                    text = "Credits",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "B Vishal Chandrakanth",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Head of Coco Copi Developers",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Image(
+                                    painter = donateLogo,
+                                    contentDescription = "Donate",
+                                    modifier = Modifier
+                                        .height(60.dp)
+                                        .clickable {
+                                            AnalyticsManager.logAction("donate_click")
+                                            runCatching {
+                                                context.startActivity(
+                                                    Intent(Intent.ACTION_VIEW, donationUrl.toUri())
+                                                )
+                                            }
+                                        },
+                                    contentScale = ContentScale.Fit
+                                )
+                                Text(
+                                    text = "Support the AD free app by donating",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(modifier = Modifier.weight(1f))
+                    Image(
+                        painter = painterResource(id = R.drawable.branding),
+                        contentDescription = "ADVOID branding",
+                        modifier = Modifier
+                            .fillMaxWidth(0.55f)
+                            .height(72.dp),
+                        contentScale = ContentScale.Fit
                     )
                     Text(
-                        text = "Version 1.0",
+                        text = "Version $versionLabel",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "ADVOID is designed to detect ad notifications from your selected music apps and automatically mute your media volume, bringing peace to your listening experience.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center
+                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Credits",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "B Vishal Chandrakanth",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "Head of Coco Copi Developers",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    Image(
+                        painter = donateLogo,
+                        contentDescription = "Donate",
+                        modifier = Modifier
+                            .height(60.dp)
+                            .clickable {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, donationUrl.toUri())
+                                    )
+                                }
+                            },
+                        contentScale = ContentScale.Fit
+                    )
+                    Text(
+                        text = "Support the AD free app by donating",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "ADMUTE is designed to detect ad notifications from your selected music apps and automatically mute your media volume, bringing peace to your listening experience.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.weight(1f))
             }
         }
         Button(
@@ -1939,7 +2653,7 @@ private fun ThemeRoller(
     ) {
         Text(
             text = previousTheme?.label ?: "",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.alpha(previousAlpha)
         )
@@ -1958,13 +2672,13 @@ private fun ThemeRoller(
         ) { theme ->
             Text(
                 text = theme.label,
-                style = MaterialTheme.typography.displayMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
         }
         Text(
             text = nextTheme?.label ?: "",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.alpha(nextAlpha)
         )
@@ -1974,7 +2688,7 @@ private fun ThemeRoller(
 @Preview(showBackground = true)
 @Composable
 private fun IntroductionScreenPreview() {
-    ADMUTETheme {
+    ADVOIDTheme {
         IntroductionScreen(onStartSetup = {})
     }
 }

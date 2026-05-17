@@ -1,6 +1,11 @@
 package com.example.admute.settings
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.core.content.ContextCompat
 import com.example.admute.R
 
 enum class NotificationSoundSource(val storageValue: String) {
@@ -85,6 +90,7 @@ object AdMuteSettings {
     private const val KEY_WHITELIST_ACTION_ENABLED = "whitelist_action_enabled"
     private const val KEY_COOLDOWN_ACTION_ENABLED = "cooldown_action_enabled"
     private const val KEY_NOTIFICATION_SOUND_ACTION_ENABLED = "notification_sound_action_enabled"
+    private const val KEY_APP_PAUSED = "app_paused"
     private const val KEY_NOW_PLAYING_APP_NAME = "now_playing_app_name"
     private const val KEY_NOW_PLAYING_PACKAGE = "now_playing_package"
     private const val KEY_NOW_PLAYING_TITLE = "now_playing_title"
@@ -94,12 +100,29 @@ object AdMuteSettings {
     private const val KEY_NOW_PLAYING_UPDATED_AT = "now_playing_updated_at"
     private const val KEY_AD_LOGS = "ad_logs"
     private const val KEY_THEME_MODE = "theme_mode"
+    private const val KEY_LAST_SPLASH_TIME = "last_splash_time"
+    private const val KEY_SETUP_DONATION_PROMPT_SHOWN = "setup_donation_prompt_shown"
+    private const val KEY_CUSTOM_AD_KEYWORDS = "custom_ad_keywords"
+    private const val KEY_DISABLED_DEFAULT_AD_KEYWORDS = "disabled_default_ad_keywords"
 
     private const val MAX_LOG_ENTRIES = 50
 
-    private const val DEFAULT_COOLDOWN_MINUTES = 3
+    private const val DEFAULT_COOLDOWN_MINUTES = 1
     private const val MIN_COOLDOWN_MINUTES = 1
     private const val MAX_COOLDOWN_MINUTES = 10
+    private const val SPLASH_COOLDOWN_MS = 0L
+
+    fun shouldShowSplash(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val lastTime = prefs.getLong(KEY_LAST_SPLASH_TIME, 0L)
+        val currentTime = System.currentTimeMillis()
+        return (currentTime - lastTime) > SPLASH_COOLDOWN_MS
+    }
+
+    fun recordSplashShown(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putLong(KEY_LAST_SPLASH_TIME, System.currentTimeMillis()).apply()
+    }
 
     fun getCooldownMinutes(context: Context): Int {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -155,14 +178,46 @@ object AdMuteSettings {
             .apply()
     }
 
+    private fun hasPostNotificationsPermission(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun hasNotificationListenerAccess(context: Context): Boolean {
+        val enabledListeners = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners").orEmpty()
+        return enabledListeners.contains(context.packageName)
+    }
+
+    private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+        val powerManager = context.getSystemService(PowerManager::class.java) ?: return false
+        return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
     fun isSetupCompleted(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getBoolean(KEY_SETUP_COMPLETED, false)
+        val isCompleted = prefs.getBoolean(KEY_SETUP_COMPLETED, false)
+        val hasPermissions = hasPostNotificationsPermission(context) &&
+                hasNotificationListenerAccess(context) &&
+                isIgnoringBatteryOptimizations(context)
+        return isCompleted && hasPermissions
     }
 
     fun saveSetupCompleted(context: Context, completed: Boolean) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putBoolean(KEY_SETUP_COMPLETED, completed).apply()
+    }
+
+    fun isSetupDonationPromptShown(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_SETUP_DONATION_PROMPT_SHOWN, false)
+    }
+
+    fun saveSetupDonationPromptShown(context: Context, shown: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_SETUP_DONATION_PROMPT_SHOWN, shown).apply()
     }
 
     fun isWhitelistActionEnabled(context: Context): Boolean {
@@ -193,6 +248,16 @@ object AdMuteSettings {
     fun saveNotificationSoundActionEnabled(context: Context, enabled: Boolean) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putBoolean(KEY_NOTIFICATION_SOUND_ACTION_ENABLED, enabled).apply()
+    }
+
+    fun isAppPaused(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_APP_PAUSED, false)
+    }
+
+    fun saveAppPaused(context: Context, paused: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_APP_PAUSED, paused).apply()
     }
 
     fun saveNowPlayingInfo(context: Context, info: NowPlayingInfo) {
@@ -322,6 +387,76 @@ object AdMuteSettings {
     fun saveThemeMode(context: Context, themeMode: ThemeMode) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_THEME_MODE, themeMode.storageValue).apply()
+    }
+
+    fun getCustomAdKeywords(context: Context): List<String> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val serialized = prefs.getString(KEY_CUSTOM_AD_KEYWORDS, "").orEmpty()
+        if (serialized.isBlank()) return emptyList()
+        return serialized
+            .split("|")
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    fun addCustomAdKeyword(context: Context, keyword: String): Boolean {
+        val normalized = keyword.trim().lowercase()
+        if (normalized.isBlank()) return false
+        val current = getCustomAdKeywords(context).toMutableList()
+        if (current.contains(normalized)) return false
+        current.add(normalized)
+        saveCustomAdKeywords(context, current)
+        return true
+    }
+
+    fun removeCustomAdKeyword(context: Context, keyword: String) {
+        val normalized = keyword.trim().lowercase()
+        if (normalized.isBlank()) return
+        val updated = getCustomAdKeywords(context).filterNot { it == normalized }
+        saveCustomAdKeywords(context, updated)
+    }
+
+    fun getDisabledDefaultAdKeywords(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val serialized = prefs.getString(KEY_DISABLED_DEFAULT_AD_KEYWORDS, "").orEmpty()
+        if (serialized.isBlank()) return emptySet()
+        return serialized
+            .split("|")
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
+
+    fun disableDefaultAdKeyword(context: Context, keyword: String) {
+        val normalized = keyword.trim().lowercase()
+        if (normalized.isBlank()) return
+        val updated = getDisabledDefaultAdKeywords(context).toMutableSet()
+        updated.add(normalized)
+        saveDisabledDefaultAdKeywords(context, updated)
+    }
+
+    fun restoreAllDefaultAdKeywords(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().remove(KEY_DISABLED_DEFAULT_AD_KEYWORDS).apply()
+    }
+
+    private fun saveCustomAdKeywords(context: Context, keywords: List<String>) {
+        val sanitized = keywords
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_CUSTOM_AD_KEYWORDS, sanitized.joinToString("|")).apply()
+    }
+
+    private fun saveDisabledDefaultAdKeywords(context: Context, keywords: Set<String>) {
+        val sanitized = keywords
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_DISABLED_DEFAULT_AD_KEYWORDS, sanitized.joinToString("|")).apply()
     }
 }
 

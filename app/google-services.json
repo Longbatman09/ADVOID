@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1076839778908",
+    "project_id": "advoid-fcb54",
+    "storage_bucket": "advoid-fcb54.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1076839778908:android:9e01ad8a5824213e937499",
+        "android_client_info": {
+          "package_name": "com.example.admute"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCrSv_cu2bejqwtSxWjRGvrsnAUa9ptPv8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

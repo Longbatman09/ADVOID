@@ -1,5 +1,6 @@
 package com.example.admute.ui.theme
 
+import android.content.res.Configuration
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.animation.animateColorAsState
@@ -10,7 +11,10 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
@@ -38,7 +42,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun ADMUTETheme(
+fun ADVOIDTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Keep brand palette as default; can be re-enabled later in settings.
     dynamicColor: Boolean = false,
@@ -85,9 +89,25 @@ fun ADMUTETheme(
         outlineVariant = outlineVariant.value
     )
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    val context = LocalContext.current
+    val configuration = remember(context, darkTheme) {
+        Configuration(context.resources.configuration).apply {
+            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                    (if (darkTheme) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+        }
+    }
+    val themeContext = remember(context, configuration) {
+        context.createConfigurationContext(configuration)
+    }
+
+    CompositionLocalProvider(
+        LocalContext provides themeContext,
+        LocalConfiguration provides configuration
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }
