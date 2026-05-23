@@ -28,6 +28,8 @@ Overall, it follows a functional-first Android utility app design philosophy.
 - On ad detection, it fades music volume to 0 and logs the event.
 - When the ad ends (keyword removed), it restores volume and applies a cooldown.
 
+![image alt](https://github.com/Longbatman09/ADVOID/blob/6a3390992f60beb014c9e5abeeec81f4825bb3e2/howitworks.png)
+
 ## Permissions
 ADVOID requests these runtime permissions:
 - `POST_NOTIFICATIONS` (status updates on Android 13+)
@@ -80,3 +82,6 @@ Firebase Analytics is used for screen views and key actions (see `AnalyticsManag
 ## Additional Documentation
 - `MUTING_SEQUENCE_IMPLEMENTATION.md`
 - `TESTING_GUIDE.md`
+
+## Credits
+Solo developer - B.Vishal Chandrakanth (Founder of Coco Copi Developers)
