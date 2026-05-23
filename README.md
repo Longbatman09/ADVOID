@@ -2,6 +2,8 @@
 
 ADVOID is an Android app that automatically mutes ad audio from selected music apps by monitoring media-style notifications and keyword matches. It restores volume after the ad ends and keeps a short cooldown to avoid rapid toggling.
 
+![image alt](https://github.com/Longbatman09/ADVOID/blob/88841fea7c06c151b186b671496149b1c85d7bd8/Banner.png)
+
 ## Features
 - Ad detection from notification text using a configurable keyword list.
 - Per-app whitelist (music apps) to limit detection scope.
