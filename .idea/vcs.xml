@@ -2,8 +2,5 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/ADBLOCK" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/ADBLOCK.worktrees/copilot-project-file-analysis" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/ADBLOCK.worktrees/copilot-splash-screen-video-size-adjustment" vcs="Git" />
   </component>
 </project>

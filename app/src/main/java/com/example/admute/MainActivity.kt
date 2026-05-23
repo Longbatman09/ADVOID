@@ -576,17 +576,19 @@ fun IntroductionScreen(
                     )
                     Text(
                         text = "ADVOID is an app which allows users\nto block disruptive ad audio automatically.",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center,
-                        lineHeight = 38.sp
+                        lineHeight = 24.sp
                     )
                     Text(
                         text = "ADVOID helps users enjoy uninterrupted listening by muting ads from selected music apps and restoring media volume smoothly.",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center,
-                        lineHeight = 38.sp
+                        lineHeight = 24.sp
                     )
                 }
             }
