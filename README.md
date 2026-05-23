@@ -1,4 +1,4 @@
-# ADVOID - Avoid Your Ads
+# ADVOID (ADMUTE)
 
 ADVOID is an Android app that automatically mutes ad audio from selected music apps by monitoring media-style notifications and keyword matches. It restores volume after the ad ends and keeps a short cooldown to avoid rapid toggling.
 
@@ -12,6 +12,13 @@ ADVOID is an Android app that automatically mutes ad audio from selected music a
 - Status notification with pause/unmute actions.
 - Local ad detection logs and total time saved.
 - Light/Dark/System theme support.
+
+## About UI
+This UI uses a minimalist and flat design style with Material Design-inspired elements.
+It focuses on a clean utility-dashboard layout using large rounded buttons and simple icons.
+The limited teal-and-gray color palette gives it a modern, functional appearance.
+Generous spacing and large touch targets improve readability and accessibility.
+Overall, it follows a functional-first Android utility app design philosophy.
 
 ## How It Works
 - `AdNotificationListenerService` listens to notification updates from whitelisted apps.
@@ -71,4 +78,3 @@ Firebase Analytics is used for screen views and key actions (see `AnalyticsManag
 ## Additional Documentation
 - `MUTING_SEQUENCE_IMPLEMENTATION.md`
 - `TESTING_GUIDE.md`
-
