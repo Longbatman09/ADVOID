@@ -940,6 +940,11 @@ fun PermissionStepScreen(
     onContinueAction: () -> Unit,
     footerText: String
 ) {
+    LaunchedEffect(granted) {
+        if (granted) {
+            onContinueAction()
+        }
+    }
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1153,7 +1158,7 @@ fun RunningScreen(
                     ActionButtonLeftAligned("Modify notification sounds", onModifyNotificationSounds, enableMarquee = true, iconRes = R.drawable.ns, useDarkTheme = useDarkTheme)
                     ActionButtonLeftAligned("Change theme", onChangeTheme, enableMarquee = true, iconRes = R.drawable.theme, useDarkTheme = useDarkTheme)
                     ActionButtonLeftAligned("View ad detection logs", onViewLogs, enableMarquee = true, iconRes = R.drawable.log, useDarkTheme = useDarkTheme)
-                    ActionButtonLeftAligned("Modify Keywords", onModifyKeywords, enableMarquee = true, iconRes = R.drawable.log, useDarkTheme = useDarkTheme)
+                    ActionButtonLeftAligned("Modify Keywords", onModifyKeywords, enableMarquee = true, iconRes = R.drawable.modify, useDarkTheme = useDarkTheme)
                     ActionButtonLeftAligned("About", onViewAbout, enableMarquee = true, iconRes = R.drawable.about, useDarkTheme = useDarkTheme)
                 }
                 Column(
@@ -1194,7 +1199,7 @@ fun RunningScreen(
                 ActionButtonLeftAligned("Modify notification sounds", onModifyNotificationSounds, iconRes = R.drawable.ns, useDarkTheme = useDarkTheme)
                 ActionButtonLeftAligned("Change theme", onChangeTheme, iconRes = R.drawable.theme, useDarkTheme = useDarkTheme)
                 ActionButtonLeftAligned("View ad detection logs", onViewLogs, iconRes = R.drawable.log, useDarkTheme = useDarkTheme)
-                ActionButtonLeftAligned("Modify Keywords", onModifyKeywords, iconRes = R.drawable.log, useDarkTheme = useDarkTheme)
+                ActionButtonLeftAligned("Modify Keywords", onModifyKeywords, iconRes = R.drawable.modify, useDarkTheme = useDarkTheme)
                 ActionButtonLeftAligned("About", onViewAbout, iconRes = R.drawable.about, useDarkTheme = useDarkTheme)
                 NowPlayingInfoBox(nowPlayingInfo = nowPlayingInfo)
                 Spacer(modifier = Modifier.weight(1f))
