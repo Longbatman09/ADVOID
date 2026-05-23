@@ -802,7 +802,7 @@ class AdNotificationListenerService : NotificationListenerService() {
         )
 
         val builder = NotificationCompat.Builder(this, STATUS_NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.vector_image)
             .setContentTitle("ADVOID is running")
             .setContentText(contentText)
             .setContentIntent(openAppPendingIntent)

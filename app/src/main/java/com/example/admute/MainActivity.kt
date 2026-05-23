@@ -313,7 +313,13 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier.padding(innerPadding)
                                 )
                             }
-                            SetupStep.RUNNING, SetupStep.COOLDOWN, SetupStep.LOGS, SetupStep.MODIFY_KEYWORDS, SetupStep.ABOUT, SetupStep.THEME -> Box(modifier = Modifier.fillMaxSize()) {
+                            SetupStep.RUNNING,
+                            SetupStep.COOLDOWN,
+                            SetupStep.LOGS,
+                            SetupStep.MODIFY_KEYWORDS,
+                            SetupStep.NOTIFICATION_SOUND,
+                            SetupStep.ABOUT,
+                            SetupStep.THEME -> Box(modifier = Modifier.fillMaxSize()) {
                                 LaunchedEffect(setupStep) {
                                     val screenName = when(setupStep) {
                                         SetupStep.RUNNING -> "Running"
@@ -383,6 +389,26 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                                 AnimatedVisibility(
+                                    visible = setupStep == SetupStep.NOTIFICATION_SOUND,
+                                    enter = fadeIn(animationSpec = tween(durationMillis = 240)),
+                                    exit = fadeOut(animationSpec = tween(durationMillis = 220))
+                                ) {
+                                    LaunchedEffect(Unit) { AnalyticsManager.logScreenView("NotificationSoundSettings", "MainActivity") }
+                                    NotificationSoundSettingsScreen(
+                                        currentSettings = notificationSoundMode,
+                                        onSave = { settings ->
+                                            AdMuteSettings.saveNotificationSoundSettings(this@MainActivity, settings)
+                                            notificationSoundMode = AdMuteSettings.getNotificationSoundSettings(this@MainActivity)
+                                            AnalyticsManager.logSettingsChanged("notification_sounds", "updated")
+                                            setupStep = SetupStep.RUNNING
+                                        },
+                                        onBack = { setupStep = SetupStep.RUNNING },
+                                        modifier = Modifier
+                                            .padding(innerPadding)
+                                            .background(MaterialTheme.colorScheme.background)
+                                    )
+                                }
+                                AnimatedVisibility(
                                     visible = setupStep == SetupStep.ABOUT,
                                     enter = fadeIn(animationSpec = tween(durationMillis = 240)),
                                     exit = fadeOut(animationSpec = tween(durationMillis = 220))
@@ -403,20 +429,6 @@ class MainActivity : ComponentActivity() {
                                         onDismiss = { setupStep = SetupStep.RUNNING }
                                     )
                                 }
-                            }
-                            SetupStep.NOTIFICATION_SOUND -> {
-                                LaunchedEffect(Unit) { AnalyticsManager.logScreenView("NotificationSoundSettings", "MainActivity") }
-                                NotificationSoundSettingsScreen(
-                                    currentSettings = notificationSoundMode,
-                                    onSave = { settings ->
-                                        AdMuteSettings.saveNotificationSoundSettings(this@MainActivity, settings)
-                                        notificationSoundMode = AdMuteSettings.getNotificationSoundSettings(this@MainActivity)
-                                        AnalyticsManager.logSettingsChanged("notification_sounds", "updated")
-                                        setupStep = SetupStep.RUNNING
-                                    },
-                                    onBack = { setupStep = SetupStep.RUNNING },
-                                    modifier = Modifier.padding(innerPadding)
-                                )
                             }
                         }
                     }

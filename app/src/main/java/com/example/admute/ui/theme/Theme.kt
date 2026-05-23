@@ -10,12 +10,14 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 private val DarkColorScheme = darkColorScheme(
     primary = AdmutePrimaryDark,
@@ -100,10 +102,19 @@ fun ADVOIDTheme(
         context.createConfigurationContext(configuration)
     }
 
-    CompositionLocalProvider(
-        LocalContext provides themeContext,
-        LocalConfiguration provides configuration
-    ) {
+    val registryOwner = LocalActivityResultRegistryOwner.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    val providers = remember(themeContext, configuration, registryOwner, lifecycleOwner) {
+        buildList {
+            add(LocalContext provides themeContext)
+            add(LocalConfiguration provides configuration)
+            add(LocalLifecycleOwner provides lifecycleOwner)
+            registryOwner?.let { add(LocalActivityResultRegistryOwner provides it) }
+        }.toTypedArray()
+    }
+
+    CompositionLocalProvider(*providers) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
