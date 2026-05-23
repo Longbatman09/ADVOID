@@ -20,7 +20,7 @@ The limited teal-and-gray color palette gives it a modern, functional appearance
 Generous spacing and large touch targets improve readability and accessibility.
 Overall, it follows a functional-first Android utility app design philosophy.
 
-![image alt]([https://github.com/Longbatman09/ADVOID/blob/88841fea7c06c151b186b671496149b1c85d7bd8/Banner.png](https://github.com/Longbatman09/ADVOID/blob/877bc056bcbd5d9bbeaf0303c66c27671ae2c9b4/Banner2.png))
+![image alt](https://github.com/Longbatman09/ADVOID/blob/877bc056bcbd5d9bbeaf0303c66c27671ae2c9b4/Banner2.png)
 
 ## How It Works
 - `AdNotificationListenerService` listens to notification updates from whitelisted apps.
