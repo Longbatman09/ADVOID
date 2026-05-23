@@ -930,7 +930,7 @@ private fun AppSelectionRow(
 
 @Composable
 fun PermissionStepScreen(
-    emoji: String,
+    iconResId: Int,
     title: String,
     description: String,
     actionDescription: String,
@@ -945,10 +945,11 @@ fun PermissionStepScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = emoji,
-            fontSize = 64.sp,
-            textAlign = TextAlign.Center
+        Image(
+            painter = painterResource(id = iconResId),
+            contentDescription = title,
+            modifier = Modifier.size(64.dp),
+            contentScale = ContentScale.Fit
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
@@ -1024,7 +1025,7 @@ fun DetectionSetupScreen(
         when (step) {
             0 -> {
                 PermissionStepScreen(
-                    emoji = "🔔",
+                    iconResId = R.drawable.bell,
                     title = "Push notifications",
                     description = "ADVOID needs push notifications to let you know about background status.",
                     actionDescription = "Please grant the notification permission.",
@@ -1037,7 +1038,7 @@ fun DetectionSetupScreen(
             }
             1 -> {
                 PermissionStepScreen(
-                    emoji = "💬",
+                    iconResId = R.drawable.noti,
                     title = "Notification access",
                     description = "ADVOID needs notification access to detect ads from other apps.",
                     actionDescription = "Open settings and allow notification access for ADVOID.",
@@ -1050,7 +1051,7 @@ fun DetectionSetupScreen(
             }
             2 -> {
                 PermissionStepScreen(
-                    emoji = "🔋",
+                    iconResId = R.drawable.battery_opt,
                     title = "Battery optimization",
                     description = "Disable battery optimization so ADVOID can run continuously without being killed by the system.",
                     actionDescription = "Allow ADVOID to run unrestricted.",
@@ -1067,10 +1068,11 @@ fun DetectionSetupScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = "✅",
-                        fontSize = 64.sp,
-                        textAlign = TextAlign.Center
+                    Image(
+                        painter = painterResource(id = R.drawable.tick),
+                        contentDescription = "All set!",
+                        modifier = Modifier.size(64.dp),
+                        contentScale = ContentScale.Fit
                     )
                     Spacer(modifier = Modifier.height(24.dp))
                     Text(
