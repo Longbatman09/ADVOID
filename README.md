@@ -37,6 +37,13 @@ ADVOID requests these runtime permissions:
 - `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (keep service alive)
 - Notification access (user must enable in settings)
 
+## Installation 
+
+Download the latest APK from the [Releases](https://github.com/Longbatman09/ADVOID/releases) page.
+
+> [!CAUTION]
+> The release version on GitHub might be flagged or blocked by **Google Play Protect** during installation. For a smoother experience, it is recommended to install the APK using **ADB** (`adb install dale-app.apk`) or to temporarily disable Play Protect.
+
 ## Build and Run
 From the project root:
 
