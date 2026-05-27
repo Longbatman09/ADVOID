@@ -85,3 +85,6 @@ Firebase Analytics is used for screen views and key actions (see `AnalyticsManag
 
 ## Credits
 Solo developer - B.Vishal Chandrakanth (Founder of Coco Copi Developers)
+
+**This project is source-available.
+Unauthorized redistribution or republishing is prohibited.**
