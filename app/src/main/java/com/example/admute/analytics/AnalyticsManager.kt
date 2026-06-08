@@ -25,11 +25,10 @@ object AnalyticsManager {
         firebaseAnalytics?.logEvent(FirebaseAnalytics.Event.SCREEN_VIEW, bundle)
     }
 
-    fun logAdDetected(packageName: String, appName: String, content: String) {
+    fun logAdDetected(packageName: String, appName: String) {
         val bundle = Bundle().apply {
             putString("package_name", packageName)
             putString("app_name", appName)
-            putString("content_preview", content.take(100))
         }
         logEvent("ad_detected", bundle)
     }

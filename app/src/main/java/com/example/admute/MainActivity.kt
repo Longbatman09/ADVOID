@@ -952,7 +952,8 @@ fun PermissionStepScreen(
     grantActionLabel: String,
     onGrantAction: () -> Unit,
     onContinueAction: () -> Unit,
-    footerText: String
+    footerText: String,
+    disclosureText: String? = null
 ) {
     LaunchedEffect(granted) {
         if (granted) {
@@ -998,6 +999,18 @@ fun PermissionStepScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
+        if (!disclosureText.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = disclosureText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = {
@@ -1065,7 +1078,8 @@ fun DetectionSetupScreen(
                     grantActionLabel = "Open access settings",
                     onGrantAction = onOpenNotificationAccess,
                     onContinueAction = { currentStep = 2 },
-                    footerText = "ADVOID will not function correctly without this permission."
+                    footerText = "ADVOID will not function correctly without this permission.",
+                    disclosureText = "ADVOID reads notification text locally to detect ad keywords. Notification content is not sent off-device, and ad logs store app names and timestamps only. You can clear logs at any time."
                 )
             }
             2 -> {
@@ -1387,11 +1401,19 @@ fun AdLogsScreen(
                                     }
                                 }
                                 Spacer(modifier = Modifier.size(4.dp))
-                                Text(
-                                    text = entry.content,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                if (entry.content.isNotBlank()) {
+                                    Text(
+                                        text = entry.content,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Content hidden for privacy",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 Text(
                                     text = entry.packageName,
                                     style = MaterialTheme.typography.labelSmall,

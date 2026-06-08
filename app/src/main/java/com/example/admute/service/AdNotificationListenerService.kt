@@ -62,6 +62,8 @@ class AdNotificationListenerService : NotificationListenerService() {
     private var cachedAlbumArtPath: String? = null
     private var lastStatusNotificationSignature: String? = null
     private var lastObservedPausedState: Boolean? = null
+    private var lastAdLogSignature: String? = null
+    private var lastAdLogTimeMs: Long = 0L
 
     private val mediaRefreshRunnable = object : Runnable {
         override fun run() {
@@ -179,7 +181,7 @@ class AdNotificationListenerService : NotificationListenerService() {
         muteStartTimeMs = System.currentTimeMillis()
         lastMediaApp = packageName
         playConfiguredSound(isStart = true)
-        fadeVolume(0, durationMs = 400L)
+        setMusicVolumeImmediately(0)
         Log.i(TAG, "Ad detected from $packageName. Mute started.")
         logAdDetection(packageName, content)
         
@@ -187,7 +189,7 @@ class AdNotificationListenerService : NotificationListenerService() {
             val appInfo = packageManager.getApplicationInfo(packageName, 0)
             packageManager.getApplicationLabel(appInfo).toString()
         }.getOrDefault(packageName)
-        AnalyticsManager.logAdDetected(packageName, appName, content)
+        AnalyticsManager.logAdDetected(packageName, appName)
 
         showToast("Ad detected. Playing IN sound and muting")
         updateStatusNotification()
@@ -199,24 +201,20 @@ class AdNotificationListenerService : NotificationListenerService() {
             packageManager.getApplicationLabel(appInfo).toString()
         }.getOrDefault(packageName)
 
-        val lastLogs = AdMuteSettings.getAdLogs(this)
-        val lastEntry = lastLogs.firstOrNull()
-        
-        // Avoid duplicate logs for same content within 2 seconds
-        if (lastEntry != null && 
-            lastEntry.packageName == packageName && 
-            lastEntry.content == content && 
-            System.currentTimeMillis() - lastEntry.timestamp < 2000) {
-            return
-        }
+        val now = System.currentTimeMillis()
+        val normalizedContent = content.trim().lowercase()
+        val signature = "$packageName|$normalizedContent"
+        if (signature == lastAdLogSignature && now - lastAdLogTimeMs < 2000L) return
+        lastAdLogSignature = signature
+        lastAdLogTimeMs = now
 
         AdMuteSettings.addAdLog(
             context = this,
             entry = AdLogEntry(
                 appName = appName,
                 packageName = packageName,
-                timestamp = System.currentTimeMillis(),
-                content = content
+                timestamp = now,
+                content = ""
             )
         )
     }
@@ -490,6 +488,15 @@ class AdNotificationListenerService : NotificationListenerService() {
         }
         currentFadeRunnable = runnable
         mainHandler.post(runnable)
+    }
+
+    private fun setMusicVolumeImmediately(targetVolume: Int, onComplete: (() -> Unit)? = null) {
+        currentFadeRunnable?.let { mainHandler.removeCallbacks(it) }
+        currentFadeRunnable = null
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(0)
+        val volume = targetVolume.coerceIn(0, max)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
+        onComplete?.invoke()
     }
 
     private fun playConfiguredSound(isStart: Boolean) {

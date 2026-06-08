@@ -106,6 +106,7 @@ object AdMuteSettings {
     private const val KEY_DISABLED_DEFAULT_AD_KEYWORDS = "disabled_default_ad_keywords"
 
     private const val MAX_LOG_ENTRIES = 50
+    private const val LOG_RETENTION_DAYS = 7
 
     private const val DEFAULT_COOLDOWN_MINUTES = 1
     private const val MIN_COOLDOWN_MINUTES = 1
@@ -310,13 +311,14 @@ object AdMuteSettings {
     fun addAdLog(context: Context, entry: AdLogEntry) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val currentLogs = getAdLogs(context).toMutableList()
-        currentLogs.add(0, entry)
+        val redactedEntry = entry.copy(content = "")
+        currentLogs.add(0, redactedEntry)
         val limitedLogs = currentLogs.take(MAX_LOG_ENTRIES)
         
         val logStrings = limitedLogs.map { 
             val app = it.appName.replace("|", " ").replace(";", " ")
             val pkg = it.packageName.replace("|", " ").replace(";", " ")
-            val content = it.content.replace("|", " ").replace(";", " ")
+            val content = ""
             "$app|$pkg|${it.timestamp}|${it.endTime}|$content"
         }
         
@@ -327,27 +329,29 @@ object AdMuteSettings {
     fun getAdLogs(context: Context): List<AdLogEntry> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val serialized = prefs.getString(KEY_AD_LOGS + "_ordered", null) ?: return emptyList()
-        return serialized.split(";").filter { it.isNotBlank() }.mapNotNull {
+        val now = System.currentTimeMillis()
+        val cutoffMs = now - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000L
+        var hadStoredContent = false
+        val parsed = serialized.split(";").filter { it.isNotBlank() }.mapNotNull {
             val parts = it.split("|")
-            if (parts.size >= 5) {
+            if (parts.size >= 4) {
+                if (parts.size >= 5 && parts[4].isNotBlank()) {
+                    hadStoredContent = true
+                }
                 AdLogEntry(
                     appName = parts[0],
                     packageName = parts[1],
                     timestamp = parts[2].toLongOrNull() ?: 0L,
                     endTime = parts[3].toLongOrNull() ?: 0L,
-                    content = parts[4]
-                )
-            } else if (parts.size == 4) {
-                // Backward compatibility
-                AdLogEntry(
-                    appName = parts[0],
-                    packageName = parts[1],
-                    timestamp = parts[2].toLongOrNull() ?: 0L,
-                    endTime = 0L,
-                    content = parts[3]
+                    content = ""
                 )
             } else null
         }
+        val filtered = parsed.filter { it.timestamp >= cutoffMs }
+        if (filtered.size != parsed.size || hadStoredContent) {
+            saveLogs(context, filtered)
+        }
+        return filtered
     }
 
     fun updateLastLogEndTime(context: Context, endTime: Long) {
@@ -366,7 +370,7 @@ object AdMuteSettings {
         val logStrings = logs.take(MAX_LOG_ENTRIES).map { 
             val app = it.appName.replace("|", " ").replace(";", " ")
             val pkg = it.packageName.replace("|", " ").replace(";", " ")
-            val content = it.content.replace("|", " ").replace(";", " ")
+            val content = ""
             "$app|$pkg|${it.timestamp}|${it.endTime}|$content"
         }
         val serialized = logStrings.joinToString(";")
@@ -459,8 +463,3 @@ object AdMuteSettings {
         prefs.edit().putString(KEY_DISABLED_DEFAULT_AD_KEYWORDS, sanitized.joinToString("|")).apply()
     }
 }
-
-
-
-
-
