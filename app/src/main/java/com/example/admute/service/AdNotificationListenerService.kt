@@ -21,6 +21,9 @@ import android.media.session.PlaybackState
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -47,6 +50,15 @@ class AdNotificationListenerService : NotificationListenerService() {
     private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
+    private val vibrator by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+    }
 
     private var trigger = false
     private var lastMediaApp: String? = null
@@ -93,10 +105,16 @@ class AdNotificationListenerService : NotificationListenerService() {
 
         val packageName = sbn.packageName
         val isWhitelistedApp = WhitelistedApps.contains(this, packageName)
+
+        if (!isWhitelistedApp && lastMediaApp != packageName) {
+            refreshNowPlayingState()
+            return
+        }
+
         val notification = sbn.notification ?: return
         val notificationKey = buildNotificationKey(sbn)
         val content = extractNotificationText(notification)
-        val isAd = content.isNotBlank() && AdKeywordRules.matches(this, content)
+        val isAd = isWhitelistedApp && content.isNotBlank() && AdKeywordRules.matches(this, content)
 
         when {
             isAd && isWhitelistedApp -> {
@@ -180,8 +198,11 @@ class AdNotificationListenerService : NotificationListenerService() {
         trigger = true
         muteStartTimeMs = System.currentTimeMillis()
         lastMediaApp = packageName
-        playConfiguredSound(isStart = true)
         setMusicVolumeImmediately(0)
+        scheduleImmediateMuteEnforcement()
+        playConfiguredSound(isStart = true)
+        triggerVibration()
+        
         Log.i(TAG, "Ad detected from $packageName. Mute started.")
         logAdDetection(packageName, content)
         
@@ -214,9 +235,18 @@ class AdNotificationListenerService : NotificationListenerService() {
                 appName = appName,
                 packageName = packageName,
                 timestamp = now,
-                content = ""
+                content = content
             )
         )
+    }
+
+    private fun triggerVibration() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(500)
+        }
     }
 
     private fun endMuteCycle(reason: String, applyCooldown: Boolean = true) {
@@ -227,7 +257,7 @@ class AdNotificationListenerService : NotificationListenerService() {
         AnalyticsManager.logMuteCycleEnded(durationSeconds)
 
         val restoreVolume = resolveRestoreVolume()
-        fadeVolume(restoreVolume, durationMs = 700L) {
+        setMusicVolumeImmediately(restoreVolume) {
             playConfiguredSound(isStart = false)
         }
 
@@ -251,7 +281,7 @@ class AdNotificationListenerService : NotificationListenerService() {
 
         val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         if (currentVolume != 0) {
-            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+            setMusicVolumeImmediately(0)
             showToast("ADVOID is active. Keeping media muted")
         }
     }
@@ -457,38 +487,7 @@ class AdNotificationListenerService : NotificationListenerService() {
         }
     }
 
-    private fun fadeVolume(targetVolume: Int, durationMs: Long, onComplete: (() -> Unit)? = null) {
-        currentFadeRunnable?.let { mainHandler.removeCallbacks(it) }
 
-        val startVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        if (startVolume == targetVolume) {
-            currentFadeRunnable = null
-            onComplete?.invoke()
-            return
-        }
-
-        val diff = targetVolume - startVolume
-        val steps = abs(diff)
-        val stepDelay = durationMs / steps.coerceAtLeast(1)
-
-        val runnable = object : Runnable {
-            var currentStep = 1
-            override fun run() {
-                val volumeToSet = startVolume + (diff * currentStep / steps)
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volumeToSet, 0)
-
-                if (currentStep < steps) {
-                    currentStep++
-                    mainHandler.postDelayed(this, stepDelay)
-                } else {
-                    currentFadeRunnable = null
-                    onComplete?.invoke()
-                }
-            }
-        }
-        currentFadeRunnable = runnable
-        mainHandler.post(runnable)
-    }
 
     private fun setMusicVolumeImmediately(targetVolume: Int, onComplete: (() -> Unit)? = null) {
         currentFadeRunnable?.let { mainHandler.removeCallbacks(it) }
@@ -497,6 +496,14 @@ class AdNotificationListenerService : NotificationListenerService() {
         val volume = targetVolume.coerceIn(0, max)
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
         onComplete?.invoke()
+    }
+
+    private fun scheduleImmediateMuteEnforcement() {
+        listOf(10L, 50L, 100L, 200L).forEach { delayMs ->
+            mainHandler.postDelayed({
+                if (trigger) enforceMuteWhileActive()
+            }, delayMs)
+        }
     }
 
     private fun playConfiguredSound(isStart: Boolean) {
@@ -865,7 +872,7 @@ class AdNotificationListenerService : NotificationListenerService() {
         private const val TAG = "AdNotificationListener"
         private const val NOW_PLAYING_ALBUM_ART_FILE_PREFIX = "now_playing_album_art"
         private const val MEDIA_REFRESH_INTERVAL_MS = 2000L
-        private const val AD_MONITOR_INTERVAL_MS = 350L
+        private const val AD_MONITOR_INTERVAL_MS = 100L
         private const val STATUS_NOTIFICATION_CHANNEL_ID = "advoid_running_status"
         private const val STATUS_NOTIFICATION_ID = 1001
         private const val ACTION_TOGGLE_PAUSE = "com.example.admute.action.TOGGLE_PAUSE"
